@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any
 
 _DANGEROUS_NAME_PATTERNS = [
     re.compile(r"\bexec\b", re.IGNORECASE),
