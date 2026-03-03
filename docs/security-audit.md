@@ -80,6 +80,8 @@ _DEFAULT_DANGEROUS_NODES = [
 - Blocks: `..`, absolute paths, null bytes, special characters
 - Validates file extensions against allowlist
 - Enforces maximum upload size (default 50MB)
+- Validates filename length (max 255 characters)
+- Validates size is non-negative
 
 **Validation Rules:**
 ```python
@@ -89,6 +91,8 @@ _DEFAULT_DANGEROUS_NODES = [
 - Invalid extensions → BLOCKED
 - Files exceeding size → BLOCKED
 - Special chars in subfolder (\n, \r) → BLOCKED
+- Filename too long (>255 chars) → BLOCKED
+- Negative file size → BLOCKED
 ```
 
 **Strengths:**
@@ -145,6 +149,7 @@ rate_limits:
   - `token`, `password`, `secret`, `api_key`, `authorization`
 - JSON Lines format for easy parsing
 - Configurable output file
+- Graceful error handling (logs to stderr on failure)
 
 ---
 
@@ -173,7 +178,6 @@ rate_limits:
 | Security Control | Status | Notes |
 |-----------------|--------|-------|
 | TLS Support | ✅ | Configurable `tls_verify` |
-| Token Authentication | ✅ | Bearer token header |
 | Connection Pooling | ✅ | Reuses connections |
 | Timeout Configuration | ✅ | Connect & read timeouts |
 | Certificate Validation | ✅ | Configurable |
@@ -255,6 +259,30 @@ rate_limits:
 3. **Input Schema Validation** - Validate all tool inputs with Pydantic
 4. **Security Headers** - Add CSP for SSE transport
 5. **Audit Log Encryption** - For sensitive environments
+
+---
+
+## Open Questions / TODO
+
+### High Priority
+
+- [ ] Add URL validation to config.py to prevent malicious URL configuration
+- [ ] Add request size limits (max workflow JSON size, max prompt length)
+- [ ] Expand dangerous node blocklist with common execution nodes from popular custom node repos
+
+### Medium Priority
+
+- [ ] Add retry logic for transient HTTP failures
+- [ ] Add maximum length limits on string config fields
+- [ ] Implement distributed rate limiting (Redis-backed) for multi-instance deployments
+
+### Low Priority
+
+- [ ] Add request signing for HTTP client
+- [ ] Add WebSocket authentication for progress streaming
+- [ ] Add input schema validation with Pydantic for all tool inputs
+- [ ] Add CSP security headers for SSE transport
+- [ ] Add audit log encryption for sensitive environments
 
 ---
 
