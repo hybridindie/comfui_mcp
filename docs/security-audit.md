@@ -181,9 +181,10 @@ rate_limits:
 | Connection Pooling | ✅ | Reuses connections |
 | Timeout Configuration | ✅ | Connect & read timeouts |
 | Certificate Validation | ✅ | Configurable |
+| Retry Logic | ✅ | Exponential backoff for 5xx errors |
+| Request Retries | ✅ | 3 retries by default, configurable |
 
 **Potential Issues:**
-- ⚠️ No retry logic for transient failures
 - ⚠️ No request signing
 
 ---
@@ -266,14 +267,14 @@ rate_limits:
 
 ### High Priority
 
-- [ ] Add URL validation to config.py to prevent malicious URL configuration
-- [ ] Add request size limits (max workflow JSON size, max prompt length)
-- [ ] Expand dangerous node blocklist with common execution nodes from popular custom node repos
+- [x] Add URL validation to config.py to prevent malicious URL configuration
+- [x] Add request size limits (max workflow JSON size, max prompt length)
+- [x] Expand dangerous node blocklist with common execution nodes from popular custom node repos
 
 ### Medium Priority
 
-- [ ] Add retry logic for transient HTTP failures
-- [ ] Add maximum length limits on string config fields
+- [x] Add retry logic for transient HTTP failures
+- [x] Add maximum length limits on string config fields
 - [ ] Implement distributed rate limiting (Redis-backed) for multi-instance deployments
 
 ### Low Priority

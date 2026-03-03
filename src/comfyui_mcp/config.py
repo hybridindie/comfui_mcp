@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 import yaml
 from pydantic import BaseModel, field_validator
@@ -19,6 +20,18 @@ _DEFAULT_DANGEROUS_NODES = [
     "RunPython",
     "ShellNode",
     "CommandExecutor",
+    "PythonCode",
+    "PythonScript",
+    "ExecPython",
+    "ExecutePython",
+    "PythonRunner",
+    "AdvancedPython",
+    "PythonFunction",
+    "SimplePython",
+    "FN_pyeval",
+    "PyFunctional",
+    "PyTorchLayer",
+    "TensorFlowOp",
 ]
 
 _DEFAULT_ALLOWED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".json"]
@@ -29,6 +42,18 @@ class ComfyUISettings(BaseModel):
     tls_verify: bool = True
     timeout_connect: int = 30
     timeout_read: int = 300
+    max_workflow_size_mb: int = 10
+    max_prompt_length: int = 10000
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        parsed = urlparse(v)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("URL must use http or https")
+        if not parsed.netloc:
+            raise ValueError("URL must have a valid host")
+        return v
 
 
 class SecuritySettings(BaseModel):
@@ -47,6 +72,15 @@ class SecuritySettings(BaseModel):
             )
         return v
 
+    @field_validator("max_upload_size_mb")
+    @classmethod
+    def validate_max_upload_size(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("max_upload_size_mb must be at least 1")
+        if v > 500:
+            raise ValueError("max_upload_size_mb must not exceed 500")
+        return v
+
 
 class RateLimitSettings(BaseModel):
     workflow: int = 10
@@ -58,6 +92,14 @@ class RateLimitSettings(BaseModel):
 class LoggingSettings(BaseModel):
     level: str = "INFO"
     audit_file: str = "~/.comfyui-mcp/audit.log"
+
+    @field_validator("level")
+    @classmethod
+    def validate_level(cls, v: str) -> str:
+        valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+        if v.upper() not in valid_levels:
+            raise ValueError(f"Level must be one of {valid_levels}")
+        return v.upper()
 
 
 class SSESettings(BaseModel):
