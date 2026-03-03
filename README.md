@@ -44,10 +44,9 @@ comfyui:
 EOF
 ```
 
-For a remote server with authentication:
+For a remote server:
 
 ```bash
-export COMFYUI_TOKEN="your-secret-token"
 cat > ~/.comfyui-mcp/config.yaml << 'EOF'
 comfyui:
   url: "https://your-gpu-server:8188"
@@ -63,10 +62,7 @@ Add to your Claude Code MCP configuration (`~/.claude/claude_desktop_config.json
   "mcpServers": {
     "comfyui": {
       "command": "uv",
-      "args": ["--directory", "/path/to/comfyui-mcp", "run", "comfyui-mcp"],
-      "env": {
-        "COMFYUI_TOKEN": "your-secret-token"
-      }
+      "args": ["--directory", "/path/to/comfyui-mcp", "run", "comfyui-mcp"]
     }
   }
 }
@@ -138,7 +134,6 @@ Config file: `~/.comfyui-mcp/config.yaml`
 ```yaml
 comfyui:
   url: "http://127.0.0.1:8188"   # ComfyUI server URL
-  token: ""                        # Bearer token (prefer COMFYUI_TOKEN env var)
   tls_verify: true                 # TLS certificate verification
   timeout_connect: 30              # Connection timeout (seconds)
   timeout_read: 300                # Read timeout (seconds)
@@ -188,9 +183,7 @@ Environment variables override config file values:
 | Variable | Overrides |
 |----------|-----------|
 | `COMFYUI_URL` | `comfyui.url` |
-| `COMFYUI_TOKEN` | `comfyui.token` |
 | `COMFYUI_TLS_VERIFY` | `comfyui.tls_verify` |
-| `COMFYUI_SECURITY_MODE` | `security.mode` |
 | `COMFYUI_LOG_LEVEL` | `logging.level` |
 
 ## Security modes
@@ -216,13 +209,53 @@ Audit log entries look like:
 }
 ```
 
-When a dangerous node is detected:
+When a dangerous node is detected, warnings are included in the tool response:
 
-```json
-{
-  "warnings": ["Dangerous node type: EvalNode"],
-  "nodes_used": ["KSampler", "EvalNode"]
+```
+Workflow submitted. prompt_id: abc123
+
+⚠️ Warnings detected:
+  - Dangerous node type: ExecutePython
+  - Suspicious input in node 5 (ExecutePython), field 'code'
+```
+
+The MCP instructions tell the LLM to inform users and ask for confirmation before proceeding when warnings are present.
+
+### Building your dangerous node list
+
+Use the `audit_dangerous_nodes` tool to scan your ComfyUI installation for potentially dangerous nodes:
+
+| Tool | Description |
+|------|-------------|
+| `audit_dangerous_nodes` | Scans all installed nodes and returns dangerous/suspicious ones with reasons |
+
+Run this once to see what dangerous nodes are installed:
+
+```
+audit_dangerous_nodes() → {
+  "total_nodes": 456,
+  "dangerous": {
+    "count": 12,
+    "nodes": [
+      {"class": "ExecutePython", "reason": "Name matches pattern: \\bexec\\b"},
+      {"class": "RunPython", "reason": "Name matches pattern: \\brunpython\\b"},
+      {"class": "ShellCommand", "reason": "Name matches pattern: \\bshell\\b"}
+    ]
+  },
+  "suspicious": {...}
 }
+```
+
+Add these to your config:
+
+```yaml
+security:
+  mode: "audit"
+  dangerous_nodes:
+    - "ExecutePython"      # from audit_dangerous_nodes
+    - "RunPython"
+    - "ShellCommand"
+    # ... other nodes found by audit
 ```
 
 ### Enforce mode
@@ -243,7 +276,7 @@ security:
     - "LoraLoader"
 ```
 
-**Tip:** Start in audit mode, review your audit logs to see which nodes you actually use, then switch to enforce mode with that allowlist.
+**Tip:** Use `audit_dangerous_nodes` to identify dangerous nodes, run workflows in audit mode to see which nodes you use, then switch to enforce mode with that allowlist.
 
 ## Audit log
 
@@ -258,6 +291,64 @@ grep '"warnings":\[' ~/.comfyui-mcp/audit.log | grep -v '"warnings":\[\]'
 ```
 
 Sensitive fields (`token`, `password`, `secret`, `api_key`, `authorization`) are automatically redacted from log entries.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        LLM (Claude, etc.)                        │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │ MCP
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     ComfyUI MCP Server                           │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
+│  │   Config    │  │   Audit     │  │   Security Layers       │  │
+│  │  (YAML/env) │  │   Logger    │  │  ┌───────────────────┐  │  │
+│  └─────────────┘  └─────────────┘  │  │ Workflow Inspector│  │  │
+│                                     │  │ - Dangerous nodes │  │  │
+│                                     │  │ - Suspicious input│  │  │
+│                                     │  ├───────────────────┤  │  │
+│                                     │  │  Path Sanitizer   │  │  │
+│                                     │  │ - Traversal block │  │  │
+│                                     │  │ - Extension filter│  │  │
+│                                     │  ├───────────────────┤  │  │
+│                                     │  │  Rate Limiter     │  │  │
+│                                     │  │  (token-bucket)   │  │  │
+│                                     │  └───────────────────┘  │  │
+│                                     └─────────────────────────┘  │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │                    Tool Groups                               │ │
+│  │  generation.py | jobs.py | discovery.py | history.py | files.py│
+│  └─────────────────────────────────────────────────────────────┘ │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │ httpx
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     ComfyUI Server                               │
+│              (REST API - port 8188)                              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Components
+
+| Component | File | Responsibility |
+|-----------|------|----------------|
+| Server | `server.py` | Entry point, wires components, registers tools |
+| Config | `config.py` | Pydantic settings, YAML loading, env overrides |
+| Client | `client.py` | Async HTTP client for ComfyUI REST API |
+| Audit | `audit.py` | Structured JSON logging with redaction |
+| Workflow Inspector | `security/inspector.py` | Node type detection, dangerous pattern matching |
+| Path Sanitizer | `security/sanitizer.py` | Path traversal, extension filtering |
+| Rate Limiter | `security/rate_limit.py` | Token-bucket per tool category |
+
+### Tool registration pattern
+
+Each `tools/*.py` module exports `register_*_tools(server, client, audit, limiter, ...)` which:
+1. Defines `@server.tool()` decorated async functions
+2. Checks rate limits
+3. Logs audit events
+4. Returns results to the LLM
 
 ## Development
 
