@@ -360,6 +360,56 @@ uv sync
 uv run pytest -v
 ```
 
+## Docker Deployment
+
+### Quick start
+
+```bash
+# Build the image
+docker build -t comfyui-mcp .
+
+# Run with environment variables
+docker run -d \
+  --name comfyui-mcp \
+  -e COMFYUI_URL=http://host.docker.internal:8188 \
+  -v ~/.comfyui-mcp:/app/config \
+  comfyui-mcp
+```
+
+### Configuration
+
+The container expects config at `/app/config/config.yaml`. Mount your config directory:
+
+```bash
+docker run -d \
+  -v ~/.comfyui-mcp:/app/config:ro \
+  -e COMFYUI_URL=http://your-comfyui:8188 \
+  comfyui-mcp
+```
+
+### Environment variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `COMFYUI_URL` | ComfyUI server URL | Required |
+| `COMFYUI_TOKEN` | API token (if set) | - |
+| `COMFYUI_SECURITY_MODE` | `audit` or `enforce` | `audit` |
+
+### Using Docker Compose
+
+```yaml
+services:
+  comfyui-mcp:
+    image: ghcr.io/hybridindie/comfyui-mcp:latest
+    volumes:
+      - ~/.comfyui-mcp:/app/config:ro
+    environment:
+      - COMFYUI_URL=http://comfyui:8188
+      - COMFYUI_SECURITY_MODE=audit
+    stdin_open: true
+    tty: true
+```
+
 ### Project structure
 
 ```
