@@ -230,13 +230,6 @@ rate_limits:
 
 ## Recommendations
 
-All immediate security recommendations have been implemented:
-
-1. ✅ **Expanded Dangerous Node List** - Now blocks 19 node types
-2. ✅ **URL Validation** - Validates http/https schemes and host presence
-3. ✅ **Request Size Limits** - max_workflow_size_mb and max_prompt_length configurable
-4. ✅ **CSP Headers** - Documented for production deployments (requires reverse proxy)
-
 ### Production Deployment
 
 For production deployments, run the MCP server behind a reverse proxy (nginx, Traefik, etc.) to add:
@@ -256,38 +249,9 @@ location / {
 
 ---
 
-## Out of Scope (Future Enhancements)
-
-The following are not implemented but documented for future consideration:
-
-- **Distributed rate limiting** - Requires Redis; not needed for single-instance deployments
-- **Request signing** - ComfyUI has no native auth; TLS provides sufficient transport security
-- **WebSocket authentication** - Not implemented in this version
-- **Input schema validation** - MCP SDK handles basic validation; Pydantic adds complexity
-- **CSP headers** - Best handled by reverse proxy in production
-- **Audit log encryption** - Not needed for typical development/prototyping use
-
----
-
 ## Compliance Notes
 
 - **No PII** is collected or stored
 - **Tokens** are redacted from logs
 - **No external telemetry** 
 - **Local-only** by design (connects to specified ComfyUI instance)
-
----
-
-## Conclusion
-
-The ComfyUI MCP Server has a **strong security foundation** with multiple defense layers:
-
-| Layer | Status | Effectiveness |
-|-------|--------|---------------|
-| Workflow Inspection | ✅ | High |
-| Path Sanitization | ✅ | High |
-| Rate Limiting | ✅ | Medium |
-| Audit Logging | ✅ | High |
-| Blocked Endpoints | ✅ | High |
-
-**Overall Assessment: SECURE** for typical deployment scenarios. The primary defense is the workflow inspector in enforce mode combined with path sanitization for file operations.
