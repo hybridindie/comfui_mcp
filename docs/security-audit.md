@@ -256,23 +256,9 @@ location / {
 
 ---
 
-## Open Questions / TODO
+## Out of Scope (Future Enhancements)
 
-### High Priority
-
-- [x] Add URL validation to config.py to prevent malicious URL configuration
-- [x] Add request size limits (max workflow JSON size, max prompt length)
-- [x] Expand dangerous node blocklist with common execution nodes from popular custom node repos
-
-### Medium Priority
-
-- [x] Add retry logic for transient HTTP failures
-- [x] Add maximum length limits on string config fields
-- [ ] Implement distributed rate limiting (Redis-backed) for multi-instance deployments
-
-### Out of Scope
-
-The following are not planned for this project as they are overkill for typical single-instance deployments:
+The following are not implemented but documented for future consideration:
 
 - **Distributed rate limiting** - Requires Redis; not needed for single-instance deployments
 - **Request signing** - ComfyUI has no native auth; TLS provides sufficient transport security
