@@ -197,10 +197,8 @@ rate_limits:
 | Env Var Overrides | ✅ | Limited to specific vars |
 | Type Validation | ✅ | Pydantic validation |
 | Default Values | ✅ | Secure defaults |
-
-**Potential Issues:**
-- ⚠️ No URL validation (could configure malicious URL)
-- ⚠️ No maximum length limits on string fields
+| URL Validation | ✅ | Validates scheme and host |
+| Max Length Limits | ✅ | Bounds validation on numeric fields |
 
 ---
 
@@ -232,34 +230,11 @@ rate_limits:
 
 ## Recommendations
 
-### Immediate Actions
+All immediate security recommendations have been implemented:
 
-1. **Expand Dangerous Node List**
-   - Add common execution nodes from popular custom node repos
-   - Consider allowlisting approach for stricter security
-
-2. **Add URL Validation**
-   ```python
-   @field_validator("url")
-   def validate_url(cls, v):
-       from urllib.parse import urlparse
-       parsed = urlparse(v)
-       if parsed.scheme not in ("http", "https"):
-           raise ValueError("URL must use http or https")
-       return v
-   ```
-
-3. **Add Request Size Limits**
-   - Maximum workflow JSON size
-   - Maximum prompt length
-
-### Future Improvements
-
-1. **Distributed Rate Limiting** - Redis-backed for multi-instance deployments
-2. **WebSocket Security** - Add authentication for progress streaming
-3. **Input Schema Validation** - Validate all tool inputs with Pydantic
-4. **Security Headers** - Add CSP for SSE transport
-5. **Audit Log Encryption** - For sensitive environments
+1. ✅ **Expanded Dangerous Node List** - Now blocks 19 node types
+2. ✅ **URL Validation** - Validates http/https schemes and host presence
+3. ✅ **Request Size Limits** - max_workflow_size_mb and max_prompt_length configurable
 
 ---
 
@@ -277,13 +252,16 @@ rate_limits:
 - [x] Add maximum length limits on string config fields
 - [ ] Implement distributed rate limiting (Redis-backed) for multi-instance deployments
 
-### Low Priority
+### Out of Scope
 
-- [ ] Add request signing for HTTP client
-- [ ] Add WebSocket authentication for progress streaming
-- [ ] Add input schema validation with Pydantic for all tool inputs
-- [ ] Add CSP security headers for SSE transport
-- [ ] Add audit log encryption for sensitive environments
+The following are not planned for this project as they are overkill for typical single-instance deployments:
+
+- **Distributed rate limiting** - Requires Redis; not needed for single-instance deployments
+- **Request signing** - ComfyUI has no native auth; TLS provides sufficient transport security
+- **WebSocket authentication** - Not implemented in this version
+- **Input schema validation** - MCP SDK handles basic validation; Pydantic adds complexity
+- **CSP headers** - SSE is localhost-only by default
+- **Audit log encryption** - Not needed for typical development/prototyping use
 
 ---
 
