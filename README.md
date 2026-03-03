@@ -392,7 +392,6 @@ docker run -d \
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `COMFYUI_URL` | ComfyUI server URL | Required |
-| `COMFYUI_TOKEN` | API token (if set) | - |
 | `COMFYUI_SECURITY_MODE` | `audit` or `enforce` | `audit` |
 
 ### Using Docker Compose

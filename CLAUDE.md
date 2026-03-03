@@ -75,7 +75,7 @@ Key settings:
 - `security.dangerous_nodes` — List of node types to flag/warn
 - `rate_limits.*` — Requests per minute per category
 
-Environment variables override config: `COMFYUI_URL`, `COMFYUI_TOKEN`, `COMFYUI_SECURITY_MODE`, etc.
+Environment variables override config: `COMFYUI_URL`, `COMFYUI_SECURITY_MODE`, etc.
 
 ## Code Conventions
 

@@ -7,7 +7,6 @@ services:
     container_name: comfyui-mcp
     environment:
       - COMFYUI_URL=${COMFYUI_URL:-http://comfyui:8188}
-      - COMFYUI_TOKEN=${COMFYUI_TOKEN:-}
       - COMFYUI_SECURITY_MODE=${COMFYUI_SECURITY_MODE:-audit}
       - COMFYUI_LOG_LEVEL=${COMFYUI_LOG_LEVEL:-INFO}
     volumes:
