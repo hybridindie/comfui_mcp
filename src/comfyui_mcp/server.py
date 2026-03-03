@@ -28,7 +28,6 @@ def _build_server(settings: Settings | None = None) -> FastMCP:
     # Initialize components
     client = ComfyUIClient(
         base_url=settings.comfyui.url,
-        token=settings.comfyui.token,
         timeout_connect=settings.comfyui.timeout_connect,
         timeout_read=settings.comfyui.timeout_read,
         tls_verify=settings.comfyui.tls_verify,
@@ -61,7 +60,10 @@ def _build_server(settings: Settings | None = None) -> FastMCP:
         instructions=(
             "Secure MCP server for generating images and managing workflows via ComfyUI. "
             "Use generate_image for quick text-to-image, or run_workflow for custom workflows. "
-            "Use list_models and list_nodes to discover available resources."
+            "Use list_models and list_nodes to discover available resources. "
+            "IMPORTANT: Before running custom workflows with run_workflow, always check the response "
+            "for warnings about dangerous nodes or suspicious inputs. If warnings are present, "
+            "inform the user and ask for confirmation before proceeding with execution."
         ),
     )
 

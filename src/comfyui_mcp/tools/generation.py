@@ -115,11 +115,17 @@ def register_generation_tools(
             status="allowed" if not result.blocked else "blocked",
         )
 
+        warning_msg = ""
+        if result.warnings:
+            warning_msg = "\n⚠️ Warnings detected:\n" + "\n".join(
+                f"  - {w}" for w in result.warnings
+            )
+
         # Submit to ComfyUI
         response = await client.post_prompt(wf)
         prompt_id = response.get("prompt_id", "unknown")
         audit.log(tool="run_workflow", action="submitted", prompt_id=prompt_id)
-        return f"Workflow submitted. prompt_id: {prompt_id}"
+        return f"Workflow submitted. prompt_id: {prompt_id}{warning_msg}"
 
     tool_fns["run_workflow"] = run_workflow
 
@@ -167,10 +173,16 @@ def register_generation_tools(
             extra={"prompt": prompt, "width": width, "height": height},
         )
 
+        warning_msg = ""
+        if result.warnings:
+            warning_msg = "\n⚠️ Warnings detected:\n" + "\n".join(
+                f"  - {w}" for w in result.warnings
+            )
+
         response = await client.post_prompt(wf)
         prompt_id = response.get("prompt_id", "unknown")
         audit.log(tool="generate_image", action="submitted", prompt_id=prompt_id)
-        return f"Image generation started. prompt_id: {prompt_id}"
+        return f"Image generation started. prompt_id: {prompt_id}{warning_msg}"
 
     tool_fns["generate_image"] = generate_image
 
