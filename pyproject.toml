@@ -31,4 +31,53 @@ dev = [
     "pytest-asyncio>=0.25.0",
     "pytest-cov>=7.0.0",
     "respx>=0.22.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "types-PyYAML>=6.0.0",
+    "pre-commit>=4.0.0",
 ]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "S",     # flake8-bandit (security)
+    "A",     # flake8-builtins
+    "T20",   # flake8-print
+    "SIM",   # flake8-simplify
+    "RUF",   # ruff-specific
+]
+ignore = [
+    "S101",  # assert used (needed in tests)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S106"]  # allow assert, hardcoded passwords in tests
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_unused_configs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "comfyui_mcp.client"
+disable_error_code = ["no-any-return"]
+
+[tool.coverage.run]
+source = ["src/comfyui_mcp"]
+
+[tool.coverage.report]
+show_missing = true
