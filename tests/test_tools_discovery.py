@@ -1,15 +1,15 @@
 """Tests for discovery MCP tools."""
 
-import pytest
 import httpx
+import pytest
 import respx
 from mcp.server.fastmcp import FastMCP
 
-from comfyui_mcp.tools.discovery import register_discovery_tools
-from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.audit import AuditLogger
-from comfyui_mcp.security.rate_limit import RateLimiter
+from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.security.node_auditor import NodeAuditor
+from comfyui_mcp.security.rate_limit import RateLimiter
+from comfyui_mcp.tools.discovery import register_discovery_tools
 
 
 @pytest.fixture
@@ -48,9 +48,7 @@ class TestListNodes:
     async def test_list_nodes_returns_node_types(self, components):
         client, audit, limiter = components
         respx.get("http://test:8188/object_info").mock(
-            return_value=httpx.Response(
-                200, json={"KSampler": {}, "CLIPTextEncode": {}}
-            )
+            return_value=httpx.Response(200, json={"KSampler": {}, "CLIPTextEncode": {}})
         )
         mcp = FastMCP("test")
         tools = register_discovery_tools(mcp, client, audit, limiter)
@@ -108,9 +106,7 @@ class TestGetModelMetadata:
     async def test_get_model_metadata(self, components):
         client, audit, limiter = components
         respx.get("http://test:8188/view_metadata/checkpoints").mock(
-            return_value=httpx.Response(
-                200, json={"filename": "model.safetensors", "size": 123456}
-            )
+            return_value=httpx.Response(200, json={"filename": "model.safetensors", "size": 123456})
         )
         mcp = FastMCP("test")
         tools = register_discovery_tools(mcp, client, audit, limiter)

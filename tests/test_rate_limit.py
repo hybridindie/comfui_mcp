@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from comfyui_mcp.security.rate_limit import RateLimitExceeded, RateLimiter
+from comfyui_mcp.security.rate_limit import RateLimiter, RateLimitError
 
 
 class TestRateLimiter:
@@ -17,7 +17,7 @@ class TestRateLimiter:
         limiter = RateLimiter(max_per_minute=2)
         limiter.check("test_tool")
         limiter.check("test_tool")
-        with pytest.raises(RateLimitExceeded):
+        with pytest.raises(RateLimitError):
             limiter.check("test_tool")
 
     def test_separate_tools_have_separate_limits(self):
@@ -36,5 +36,5 @@ class TestRateLimiter:
 
     def test_error_message_includes_tool_name(self):
         limiter = RateLimiter(max_per_minute=0)
-        with pytest.raises(RateLimitExceeded, match="my_tool"):
+        with pytest.raises(RateLimitError, match="my_tool"):
             limiter.check("my_tool")

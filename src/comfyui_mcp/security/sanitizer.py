@@ -37,8 +37,7 @@ class PathSanitizer:
         suffix = PurePosixPath(normalized).suffix.lower()
         if not suffix or suffix not in self._allowed_extensions:
             raise PathValidationError(
-                f"Disallowed file extension {suffix!r}. "
-                f"Allowed: {sorted(self._allowed_extensions)}"
+                f"Disallowed file extension {suffix!r}. Allowed: {sorted(self._allowed_extensions)}"
             )
 
         return normalized
@@ -60,14 +59,10 @@ class PathSanitizer:
 
         parts = PurePosixPath(normalized).parts
         if ".." in parts:
-            raise PathValidationError(
-                f"Subfolder contains path traversal: {subfolder!r}"
-            )
+            raise PathValidationError(f"Subfolder contains path traversal: {subfolder!r}")
 
         if any(c in normalized for c in ["\n", "\r", "\0"]):
-            raise PathValidationError(
-                f"Subfolder contains invalid characters: {subfolder!r}"
-            )
+            raise PathValidationError(f"Subfolder contains invalid characters: {subfolder!r}")
 
         return normalized
 
@@ -78,6 +73,4 @@ class PathSanitizer:
         if size_bytes > self._max_size_bytes:
             max_mb = self._max_size_bytes / (1024 * 1024)
             actual_mb = size_bytes / (1024 * 1024)
-            raise PathValidationError(
-                f"File size {actual_mb:.1f}MB exceeds maximum {max_mb:.0f}MB"
-            )
+            raise PathValidationError(f"File size {actual_mb:.1f}MB exceeds maximum {max_mb:.0f}MB")

@@ -66,9 +66,7 @@ class NodeAuditor:
         self._dangerous_patterns = dangerous_patterns or _DANGEROUS_NAME_PATTERNS
         self._dangerous_input_types = dangerous_input_types or _DANGEROUS_INPUT_TYPES
 
-    def audit_node_class(
-        self, node_class: str, node_info: dict
-    ) -> DangerousNode | None:
+    def audit_node_class(self, node_class: str, node_info: dict) -> DangerousNode | None:
         reasons = []
         category = "suspicious"
 
@@ -90,7 +88,7 @@ class NodeAuditor:
 
                     options = input_spec.get("options", {})
                     if isinstance(options, dict):
-                        for opt_key, opt_val in options.items():
+                        for _opt_key, opt_val in options.items():
                             if isinstance(opt_val, str):
                                 for pattern in self._dangerous_patterns:
                                     if pattern.search(opt_val):

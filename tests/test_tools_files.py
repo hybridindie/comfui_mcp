@@ -2,16 +2,16 @@
 
 import base64
 
-import pytest
 import httpx
+import pytest
 import respx
 from mcp.server.fastmcp import FastMCP
 
-from comfyui_mcp.tools.files import register_file_tools
-from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.audit import AuditLogger
+from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.security.rate_limit import RateLimiter
 from comfyui_mcp.security.sanitizer import PathSanitizer, PathValidationError
+from comfyui_mcp.tools.files import register_file_tools
 
 
 @pytest.fixture
@@ -47,9 +47,7 @@ class TestUploadImage:
         tools = register_file_tools(mcp, client, audit, limiter, sanitizer)
         image_b64 = base64.b64encode(b"fake").decode()
         with pytest.raises(PathValidationError):
-            await tools["upload_image"](
-                filename="../../etc/passwd.png", image_data=image_b64
-            )
+            await tools["upload_image"](filename="../../etc/passwd.png", image_data=image_b64)
 
     async def test_upload_bad_extension_blocked(self, components):
         client, audit, limiter, sanitizer = components

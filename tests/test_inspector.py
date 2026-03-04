@@ -3,8 +3,8 @@
 import pytest
 
 from comfyui_mcp.security.inspector import (
-    WorkflowInspector,
     WorkflowBlockedError,
+    WorkflowInspector,
 )
 
 

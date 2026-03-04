@@ -9,9 +9,9 @@ import json
 import httpx
 import respx
 
-from comfyui_mcp.config import Settings, ComfyUISettings, SecuritySettings
-from comfyui_mcp.server import _build_server
+from comfyui_mcp.config import ComfyUISettings, SecuritySettings, Settings
 from comfyui_mcp.security.inspector import WorkflowBlockedError
+from comfyui_mcp.server import _build_server
 
 
 class TestImageGenerationFlow:
@@ -45,9 +45,7 @@ class TestImageGenerationFlow:
             )
         )
 
-        settings = Settings(
-            comfyui=ComfyUISettings(url="http://mock-comfyui:8188")
-        )
+        settings = Settings(comfyui=ComfyUISettings(url="http://mock-comfyui:8188"))
         server, _ = _build_server(settings)
 
         # Step 1: Discover available models
@@ -73,9 +71,7 @@ class TestImageGenerationFlow:
             return_value=httpx.Response(200, json={"prompt_id": "danger-001"})
         )
 
-        settings = Settings(
-            comfyui=ComfyUISettings(url="http://mock-comfyui:8188")
-        )
+        settings = Settings(comfyui=ComfyUISettings(url="http://mock-comfyui:8188"))
         server, _ = _build_server(settings)
 
         run_workflow_fn = server._tool_manager._tools["run_workflow"].fn
@@ -99,6 +95,6 @@ class TestImageGenerationFlow:
         workflow = json.dumps({"1": {"class_type": "MaliciousNode", "inputs": {}}})
         try:
             await run_workflow_fn(workflow=workflow)
-            assert False, "Should have raised WorkflowBlockedError"
+            raise AssertionError("Should have raised WorkflowBlockedError")
         except WorkflowBlockedError as e:
             assert "MaliciousNode" in str(e)

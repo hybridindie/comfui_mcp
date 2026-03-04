@@ -17,9 +17,7 @@ class ComfyUIClient:
         max_retries: int = 3,
     ) -> None:
         self._base_url = base_url.rstrip("/")
-        self._timeout = httpx.Timeout(
-            connect=timeout_connect, read=timeout_read, write=30, pool=30
-        )
+        self._timeout = httpx.Timeout(connect=timeout_connect, read=timeout_read, write=30, pool=30)
         self._tls_verify = tls_verify
         self._client: httpx.AsyncClient | None = None
         self._max_retries = max_retries
@@ -33,9 +31,7 @@ class ComfyUIClient:
             )
         return self._client
 
-    async def _request(
-        self, method: str, path: str, **kwargs
-    ) -> httpx.Response:
+    async def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
         """Make an HTTP request with retry logic for transient failures."""
         last_exception: Exception | None = None
         for attempt in range(self._max_retries):
@@ -58,7 +54,7 @@ class ComfyUIClient:
             await self._client.aclose()
             self._client = None
 
-    async def __aenter__(self) -> "ComfyUIClient":
+    async def __aenter__(self) -> ComfyUIClient:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -95,21 +91,15 @@ class ComfyUIClient:
     async def delete_queue_item(self, prompt_id: str) -> None:
         await self._request("post", "/queue", json={"delete": [prompt_id]})
 
-    async def upload_image(
-        self, data: bytes, filename: str, subfolder: str = ""
-    ) -> dict:
+    async def upload_image(self, data: bytes, filename: str, subfolder: str = "") -> dict:
         files = {"image": (filename, data, "image/png")}
         form_data: dict[str, str] = {}
         if subfolder:
             form_data["subfolder"] = subfolder
-        r = await self._request(
-            "post", "/upload/image", files=files, data=form_data
-        )
+        r = await self._request("post", "/upload/image", files=files, data=form_data)
         return r.json()
 
-    async def get_image(
-        self, filename: str, subfolder: str = "output"
-    ) -> tuple[bytes, str]:
+    async def get_image(self, filename: str, subfolder: str = "output") -> tuple[bytes, str]:
         r = await self._request(
             "get", "/view", params={"filename": filename, "subfolder": subfolder}
         )
@@ -137,18 +127,14 @@ class ComfyUIClient:
         return r.json()
 
     async def get_view_metadata(self, folder: str, filename: str) -> dict:
-        r = await self._request(
-            "get", f"/view_metadata/{folder}", params={"filename": filename}
-        )
+        r = await self._request("get", f"/view_metadata/{folder}", params={"filename": filename})
         return r.json()
 
     async def get_prompt_status(self) -> dict:
         r = await self._request("get", "/prompt")
         return r.json()
 
-    async def clear_queue(
-        self, clear_running: bool = False, clear_pending: bool = False
-    ) -> None:
+    async def clear_queue(self, clear_running: bool = False, clear_pending: bool = False) -> None:
         data: dict[str, list[str]] = {"clear": []}
         if clear_running:
             data["clear"].append("running")
@@ -156,14 +142,10 @@ class ComfyUIClient:
             data["clear"].append("pending")
         await self._request("post", "/queue", json=data)
 
-    async def upload_mask(
-        self, data: bytes, filename: str, subfolder: str = ""
-    ) -> dict:
+    async def upload_mask(self, data: bytes, filename: str, subfolder: str = "") -> dict:
         files = {"mask": (filename, data, "image/png")}
         form_data: dict[str, str] = {}
         if subfolder:
             form_data["subfolder"] = subfolder
-        r = await self._request(
-            "post", "/upload/mask", files=files, data=form_data
-        )
+        r = await self._request("post", "/upload/mask", files=files, data=form_data)
         return r.json()

@@ -1,15 +1,14 @@
 """Tests for history MCP tools."""
 
 import httpx
+import pytest
 import respx
 from mcp.server.fastmcp import FastMCP
 
-from comfyui_mcp.tools.history import register_history_tools
-from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.audit import AuditLogger
+from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.security.rate_limit import RateLimiter
-
-import pytest
+from comfyui_mcp.tools.history import register_history_tools
 
 
 @pytest.fixture

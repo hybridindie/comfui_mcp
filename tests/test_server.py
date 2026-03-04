@@ -1,6 +1,6 @@
 """Tests for server initialization and tool registration."""
 
-from comfyui_mcp.config import Settings, ComfyUISettings
+from comfyui_mcp.config import ComfyUISettings, Settings
 from comfyui_mcp.server import _build_server
 
 

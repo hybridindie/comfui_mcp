@@ -77,9 +77,7 @@ def _register_all_tools(
     register_history_tools(server, client, audit, rate_limiters["read"])
     register_job_tools(server, client, audit, rate_limiters["workflow"])
     register_file_tools(server, client, audit, rate_limiters["file"], sanitizer)
-    register_generation_tools(
-        server, client, audit, rate_limiters["generation"], inspector
-    )
+    register_generation_tools(server, client, audit, rate_limiters["generation"], inspector)
 
 
 def _build_server(settings: Settings | None = None) -> tuple[FastMCP, Settings]:
@@ -100,7 +98,8 @@ def _build_server(settings: Settings | None = None) -> tuple[FastMCP, Settings]:
             "Secure MCP server for generating images and managing workflows via ComfyUI. "
             "Use generate_image for quick text-to-image, or run_workflow for custom workflows. "
             "Use list_models and list_nodes to discover available resources. "
-            "IMPORTANT: Before running custom workflows with run_workflow, always check the response "
+            "IMPORTANT: Before running custom workflows with run_workflow, always check the "
+            "response "
             "for warnings about dangerous nodes or suspicious inputs. If warnings are present, "
             "inform the user and ask for confirmation before proceeding with execution."
         ),
@@ -112,9 +111,7 @@ def _build_server(settings: Settings | None = None) -> tuple[FastMCP, Settings]:
 
     server = FastMCP(**server_kwargs)
 
-    _register_all_tools(
-        server, client, audit, rate_limiters, inspector, sanitizer, node_auditor
-    )
+    _register_all_tools(server, client, audit, rate_limiters, inspector, sanitizer, node_auditor)
 
     return server, settings
 
@@ -126,7 +123,7 @@ mcp, _settings = _build_server()
 def main() -> None:
     """Run the MCP server."""
     if _settings.transport.sse.enabled:
-        mcp.run(
+        mcp.run(  # type: ignore[call-arg]
             transport="sse",
             host=_settings.transport.sse.host,
             port=_settings.transport.sse.port,

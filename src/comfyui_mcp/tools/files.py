@@ -62,9 +62,7 @@ def register_file_tools(
         limiter.check("get_image")
         clean_name = sanitizer.validate_filename(filename)
         clean_subfolder = sanitizer.validate_subfolder(subfolder)
-        audit.log(
-            tool="get_image", action="downloading", extra={"filename": clean_name}
-        )
+        audit.log(tool="get_image", action="downloading", extra={"filename": clean_name})
         data, content_type = await client.get_image(clean_name, clean_subfolder)
         b64 = base64.b64encode(data).decode()
         return f"data:{content_type};base64,{b64}"
@@ -110,9 +108,7 @@ def register_file_tools(
         )
         result = await client.upload_mask(raw, clean_name, clean_subfolder)
         audit.log(tool="upload_mask", action="uploaded", extra={"result": result})
-        return (
-            f"Uploaded mask {result.get('name', clean_name)} to ComfyUI input directory"
-        )
+        return f"Uploaded mask {result.get('name', clean_name)} to ComfyUI input directory"
 
     tool_fns["upload_mask"] = upload_mask
 

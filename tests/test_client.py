@@ -23,9 +23,7 @@ class TestComfyUIClient:
     @respx.mock
     async def test_get_queue(self, client):
         respx.get("http://test-comfyui:8188/queue").mock(
-            return_value=httpx.Response(
-                200, json={"queue_running": [], "queue_pending": []}
-            )
+            return_value=httpx.Response(200, json={"queue_running": [], "queue_pending": []})
         )
         result = await client.get_queue()
         assert "queue_running" in result
@@ -35,17 +33,13 @@ class TestComfyUIClient:
         respx.post("http://test-comfyui:8188/prompt").mock(
             return_value=httpx.Response(200, json={"prompt_id": "abc-123"})
         )
-        result = await client.post_prompt(
-            {"1": {"class_type": "KSampler", "inputs": {}}}
-        )
+        result = await client.post_prompt({"1": {"class_type": "KSampler", "inputs": {}}})
         assert result["prompt_id"] == "abc-123"
 
     @respx.mock
     async def test_get_models(self, client):
         respx.get("http://test-comfyui:8188/models/checkpoints").mock(
-            return_value=httpx.Response(
-                200, json=["model_v1.safetensors", "model_v2.safetensors"]
-            )
+            return_value=httpx.Response(200, json=["model_v1.safetensors", "model_v2.safetensors"])
         )
         result = await client.get_models("checkpoints")
         assert len(result) == 2
@@ -96,9 +90,7 @@ class TestComfyUIClient:
 
     @respx.mock
     async def test_delete_queue_item(self, client):
-        respx.post("http://test-comfyui:8188/queue").mock(
-            return_value=httpx.Response(200, json={})
-        )
+        respx.post("http://test-comfyui:8188/queue").mock(return_value=httpx.Response(200, json={}))
         await client.delete_queue_item("abc-123")
 
     @respx.mock
@@ -145,9 +137,7 @@ class TestComfyUIClient:
     @respx.mock
     async def test_get_view_metadata(self, client):
         respx.get("http://test-comfyui:8188/view_metadata/checkpoints").mock(
-            return_value=httpx.Response(
-                200, json={"filename": "model.safetensors", "size": 123456}
-            )
+            return_value=httpx.Response(200, json={"filename": "model.safetensors", "size": 123456})
         )
         result = await client.get_view_metadata("checkpoints", "model.safetensors")
         assert result["filename"] == "model.safetensors"

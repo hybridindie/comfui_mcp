@@ -26,7 +26,7 @@ def _format_warnings(warnings: list[str]) -> str:
 
 
 # Default txt2img workflow — uses standard ComfyUI nodes
-_DEFAULT_TXT2IMG = {
+_DEFAULT_TXT2IMG: dict[str, dict[str, Any]] = {
     "3": {
         "class_type": "KSampler",
         "inputs": {
@@ -113,7 +113,7 @@ def register_generation_tools(
         try:
             wf = json.loads(workflow)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON workflow: {e}")
+            raise ValueError(f"Invalid JSON workflow: {e}") from e
 
         # Inspect the workflow
         result = inspector.inspect(wf)
@@ -166,9 +166,7 @@ def register_generation_tools(
             raise ValueError("cfg must be between 1.0 and 30.0")
 
         limiter.check("generate_image")
-        wf = _build_txt2img_workflow(
-            prompt, negative_prompt, width, height, steps, cfg, model
-        )
+        wf = _build_txt2img_workflow(prompt, negative_prompt, width, height, steps, cfg, model)
 
         result = inspector.inspect(wf)
         audit.log(

@@ -5,12 +5,12 @@ from __future__ import annotations
 import time
 
 
-class RateLimitExceeded(Exception):
+class RateLimitError(Exception):
     """Raised when a tool exceeds its rate limit."""
 
 
 class _Bucket:
-    __slots__ = ("_max_tokens", "_tokens", "_refill_rate", "_last_refill")
+    __slots__ = ("_last_refill", "_max_tokens", "_refill_rate", "_tokens")
 
     def __init__(self, max_per_minute: int) -> None:
         self._max_tokens = float(max_per_minute)
@@ -36,12 +36,12 @@ class RateLimiter:
         self._buckets: dict[str, _Bucket] = {}
 
     def check(self, tool_name: str) -> None:
-        """Check rate limit for a tool. Raises RateLimitExceeded if over limit."""
+        """Check rate limit for a tool. Raises RateLimitError if over limit."""
         if tool_name not in self._buckets:
             self._buckets[tool_name] = _Bucket(self._max_per_minute)
 
         if not self._buckets[tool_name].consume():
-            raise RateLimitExceeded(
+            raise RateLimitError(
                 f"Rate limit exceeded for tool '{tool_name}'. "
                 f"Max {self._max_per_minute} requests/minute."
             )

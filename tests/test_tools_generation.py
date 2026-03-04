@@ -2,16 +2,16 @@
 
 import json
 
-import pytest
 import httpx
+import pytest
 import respx
 from mcp.server.fastmcp import FastMCP
 
-from comfyui_mcp.tools.generation import register_generation_tools
-from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.audit import AuditLogger
-from comfyui_mcp.security.inspector import WorkflowInspector, WorkflowBlockedError
+from comfyui_mcp.client import ComfyUIClient
+from comfyui_mcp.security.inspector import WorkflowBlockedError, WorkflowInspector
 from comfyui_mcp.security.rate_limit import RateLimiter
+from comfyui_mcp.tools.generation import register_generation_tools
 
 
 @pytest.fixture
@@ -91,9 +91,7 @@ class TestGenerateImage:
         )
         mcp = FastMCP("test")
         tools = register_generation_tools(mcp, client, audit, limiter, inspector)
-        result = await tools["generate_image"](
-            prompt="a beautiful sunset over mountains"
-        )
+        result = await tools["generate_image"](prompt="a beautiful sunset over mountains")
         assert "img-001" in result
 
     async def test_rejects_invalid_width(self, components):

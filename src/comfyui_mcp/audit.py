@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, Field, model_serializer
@@ -10,15 +10,13 @@ from pydantic import BaseModel, Field, model_serializer
 _SENSITIVE_KEYS = {"token", "password", "secret", "api_key", "authorization"}
 
 
-def _redact_sensitive(data: dict) -> dict:
+def _redact_sensitive(data: dict[str, object]) -> dict[str, object]:
     """Remove sensitive keys from a dictionary."""
     return {k: v for k, v in data.items() if k.lower() not in _SENSITIVE_KEYS}
 
 
 class AuditRecord(BaseModel):
-    timestamp: str = Field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     tool: str
     action: str
     prompt_id: str = ""
@@ -26,11 +24,11 @@ class AuditRecord(BaseModel):
     warnings: list[str] = []
     duration_ms: int = 0
     status: str = ""
-    extra: dict = {}
+    extra: dict[str, object] = {}
 
     @model_serializer
-    def serialize(self) -> dict:
-        data = {
+    def serialize(self) -> dict[str, object]:
+        data: dict[str, object] = {
             "timestamp": self.timestamp,
             "tool": self.tool,
             "action": self.action,
@@ -62,7 +60,7 @@ class AuditLogger:
             with open(self._audit_file, "a") as f:
                 f.write(record.model_dump_json() + "\n")
         except OSError as e:
-            import sys
+            import logging
 
-            print(f"AUDIT LOG FAILURE: {e}", file=sys.stderr)
+            logging.getLogger(__name__).error("AUDIT LOG FAILURE: %s", e)
         return record

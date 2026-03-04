@@ -68,9 +68,7 @@ def register_job_tools(
     tool_fns["get_queue_status"] = get_queue_status
 
     @mcp.tool()
-    async def clear_queue(
-        clear_running: bool = False, clear_pending: bool = True
-    ) -> str:
+    async def clear_queue(clear_running: bool = False, clear_pending: bool = True) -> str:
         """Clear items from the execution queue.
 
         Args:
@@ -83,9 +81,7 @@ def register_job_tools(
             action="called",
             extra={"clear_running": clear_running, "clear_pending": clear_pending},
         )
-        await client.clear_queue(
-            clear_running=clear_running, clear_pending=clear_pending
-        )
+        await client.clear_queue(clear_running=clear_running, clear_pending=clear_pending)
         return f"Queue cleared (running={clear_running}, pending={clear_pending})"
 
     tool_fns["clear_queue"] = clear_queue

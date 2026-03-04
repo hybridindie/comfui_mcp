@@ -45,9 +45,7 @@ def register_discovery_tools(
     async def get_node_info(node_class: str) -> dict:
         """Get detailed information about a specific node type."""
         limiter.check("get_node_info")
-        audit.log(
-            tool="get_node_info", action="called", extra={"node_class": node_class}
-        )
+        audit.log(tool="get_node_info", action="called", extra={"node_class": node_class})
         return await client.get_object_info(node_class)
 
     tool_fns["get_node_info"] = get_node_info
@@ -129,15 +127,13 @@ def register_discovery_tools(
             "dangerous": {
                 "count": result.dangerous_count,
                 "nodes": [
-                    {"class": n.node_class, "reason": n.reason}
-                    for n in result.dangerous_nodes
+                    {"class": n.node_class, "reason": n.reason} for n in result.dangerous_nodes
                 ],
             },
             "suspicious": {
                 "count": result.suspicious_count,
                 "nodes": [
-                    {"class": n.node_class, "reason": n.reason}
-                    for n in result.suspicious_nodes
+                    {"class": n.node_class, "reason": n.reason} for n in result.suspicious_nodes
                 ],
             },
         }

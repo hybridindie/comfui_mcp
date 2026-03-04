@@ -2,8 +2,6 @@
 
 import json
 
-import pytest
-
 from comfyui_mcp.audit import AuditLogger, AuditRecord
 
 

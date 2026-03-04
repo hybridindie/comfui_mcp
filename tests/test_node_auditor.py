@@ -1,11 +1,7 @@
 """Tests for node danger auditor."""
 
-import pytest
-
 from comfyui_mcp.security.node_auditor import (
-    DangerousNode,
     NodeAuditor,
-    NodeAuditResult,
 )
 
 

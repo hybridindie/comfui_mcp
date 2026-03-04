@@ -26,28 +26,20 @@ class InspectionResult:
     warnings: list[str] = field(default_factory=list)
 
 
-def _check_value_for_suspicious(
-    value: Any, node_id: str, class_type: str, key: str
-) -> list[str]:
+def _check_value_for_suspicious(value: Any, node_id: str, class_type: str, key: str) -> list[str]:
     """Recursively check a value for suspicious patterns."""
     warnings = []
     if isinstance(value, str):
         for pattern in _SUSPICIOUS_PATTERNS:
             if pattern.search(value):
-                warnings.append(
-                    f"Suspicious input in node {node_id} ({class_type}), field '{key}'"
-                )
+                warnings.append(f"Suspicious input in node {node_id} ({class_type}), field '{key}'")
                 break
     elif isinstance(value, dict):
         for k, v in value.items():
-            warnings.extend(
-                _check_value_for_suspicious(v, node_id, class_type, f"{key}.{k}")
-            )
+            warnings.extend(_check_value_for_suspicious(v, node_id, class_type, f"{key}.{k}"))
     elif isinstance(value, list):
         for i, v in enumerate(value):
-            warnings.extend(
-                _check_value_for_suspicious(v, node_id, class_type, f"{key}[{i}]")
-            )
+            warnings.extend(_check_value_for_suspicious(v, node_id, class_type, f"{key}[{i}]"))
     return warnings
 
 
@@ -75,9 +67,7 @@ class WorkflowInspector:
                 nodes_used.append(class_type)
 
             for key, value in node_data.get("inputs", {}).items():
-                warnings.extend(
-                    _check_value_for_suspicious(value, node_id, class_type, key)
-                )
+                warnings.extend(_check_value_for_suspicious(value, node_id, class_type, key))
 
         # Check for dangerous nodes
         for node_type in nodes_used:
