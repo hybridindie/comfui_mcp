@@ -1,18 +1,11 @@
 """Tests for configuration loading."""
 
-import os
-from pathlib import Path
-
 import pytest
 import yaml
 
 from comfyui_mcp.config import (
-    ComfyUISettings,
-    LoggingSettings,
-    RateLimitSettings,
     SecuritySettings,
     Settings,
-    TransportSettings,
     load_settings,
 )
 
@@ -31,9 +24,9 @@ class TestSettingsDefaults:
         assert s.rate_limits.workflow == 10
         assert s.rate_limits.read_only == 60
 
-    def test_default_transport_stdio(self):
+    def test_default_transport_sse_disabled(self):
         s = Settings()
-        assert s.transport.stdio is True
+        assert s.transport.sse.enabled is False
 
     def test_dangerous_nodes_default(self):
         s = Settings()

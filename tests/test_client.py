@@ -1,7 +1,9 @@
 """Tests for ComfyUI HTTP client."""
 
-import pytest
+import json
+
 import httpx
+import pytest
 import respx
 
 from comfyui_mcp.client import ComfyUIClient
@@ -19,7 +21,6 @@ def client():
 
 class TestComfyUIClient:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_get_queue(self, client):
         respx.get("http://test-comfyui:8188/queue").mock(
             return_value=httpx.Response(
@@ -30,7 +31,6 @@ class TestComfyUIClient:
         assert "queue_running" in result
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_post_prompt(self, client):
         respx.post("http://test-comfyui:8188/prompt").mock(
             return_value=httpx.Response(200, json={"prompt_id": "abc-123"})
@@ -41,7 +41,6 @@ class TestComfyUIClient:
         assert result["prompt_id"] == "abc-123"
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_get_models(self, client):
         respx.get("http://test-comfyui:8188/models/checkpoints").mock(
             return_value=httpx.Response(
@@ -52,7 +51,6 @@ class TestComfyUIClient:
         assert len(result) == 2
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_get_history(self, client):
         respx.get("http://test-comfyui:8188/history").mock(
             return_value=httpx.Response(200, json={"abc": {"outputs": {}}})
@@ -61,7 +59,6 @@ class TestComfyUIClient:
         assert "abc" in result
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_get_object_info(self, client):
         respx.get("http://test-comfyui:8188/object_info").mock(
             return_value=httpx.Response(200, json={"KSampler": {"input": {}}})
@@ -70,15 +67,13 @@ class TestComfyUIClient:
         assert "KSampler" in result
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_interrupt(self, client):
         respx.post("http://test-comfyui:8188/interrupt").mock(
             return_value=httpx.Response(200, json={})
         )
-        await client.interrupt()  # Should not raise
+        await client.interrupt()
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_upload_image(self, client):
         respx.post("http://test-comfyui:8188/upload/image").mock(
             return_value=httpx.Response(
@@ -89,7 +84,6 @@ class TestComfyUIClient:
         assert result["name"] == "uploaded.png"
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_get_image(self, client):
         respx.get("http://test-comfyui:8188/view").mock(
             return_value=httpx.Response(
@@ -101,7 +95,6 @@ class TestComfyUIClient:
         assert content_type == "image/png"
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_delete_queue_item(self, client):
         respx.post("http://test-comfyui:8188/queue").mock(
             return_value=httpx.Response(200, json={})
@@ -109,7 +102,6 @@ class TestComfyUIClient:
         await client.delete_queue_item("abc-123")
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_get_history_item(self, client):
         respx.get("http://test-comfyui:8188/history/abc-123").mock(
             return_value=httpx.Response(200, json={"abc-123": {"outputs": {}}})
@@ -118,7 +110,6 @@ class TestComfyUIClient:
         assert "abc-123" in result
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_get_embeddings(self, client):
         respx.get("http://test-comfyui:8188/embeddings").mock(
             return_value=httpx.Response(200, json=["embedding1.pt", "embedding2.pt"])
@@ -127,16 +118,6 @@ class TestComfyUIClient:
         assert len(result) == 2
 
     @respx.mock
-    @pytest.mark.asyncio
-    async def test_get_workflow_templates(self, client):
-        respx.get("http://test-comfyui:8188/workflow_templates").mock(
-            return_value=httpx.Response(200, json=[{"name": "template1", "nodes": []}])
-        )
-        result = await client.get_workflow_templates()
-        assert len(result) == 1
-
-    @respx.mock
-    @pytest.mark.asyncio
     async def test_get_extensions(self, client):
         respx.get("http://test-comfyui:8188/extensions").mock(
             return_value=httpx.Response(200, json=["ext1", "ext2"])
@@ -145,7 +126,6 @@ class TestComfyUIClient:
         assert len(result) == 2
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_get_features(self, client):
         respx.get("http://test-comfyui:8188/features").mock(
             return_value=httpx.Response(200, json={"supports_preview_metadata": True})
@@ -154,7 +134,6 @@ class TestComfyUIClient:
         assert result["supports_preview_metadata"] is True
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_get_model_types(self, client):
         respx.get("http://test-comfyui:8188/models").mock(
             return_value=httpx.Response(200, json=["checkpoints", "loras", "vae"])
@@ -164,7 +143,6 @@ class TestComfyUIClient:
         assert "checkpoints" in result
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_get_view_metadata(self, client):
         respx.get("http://test-comfyui:8188/view_metadata/checkpoints").mock(
             return_value=httpx.Response(
@@ -175,7 +153,6 @@ class TestComfyUIClient:
         assert result["filename"] == "model.safetensors"
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_get_prompt_status(self, client):
         respx.get("http://test-comfyui:8188/prompt").mock(
             return_value=httpx.Response(200, json={"exec_info": {"queue_remaining": 0}})
@@ -184,49 +161,32 @@ class TestComfyUIClient:
         assert "exec_info" in result
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_clear_queue_pending(self, client):
         route = respx.post("http://test-comfyui:8188/queue").mock(
             return_value=httpx.Response(200, json={})
         )
         await client.clear_queue(clear_pending=True)
-        assert route.calls[0].request.json() == {"clear": ["pending"]}
+        assert json.loads(route.calls[0].request.content) == {"clear": ["pending"]}
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_clear_queue_running(self, client):
         route = respx.post("http://test-comfyui:8188/queue").mock(
             return_value=httpx.Response(200, json={})
         )
         await client.clear_queue(clear_running=True)
-        assert route.calls[0].request.json() == {"clear": ["running"]}
+        assert json.loads(route.calls[0].request.content) == {"clear": ["running"]}
 
     @respx.mock
-    @pytest.mark.asyncio
-    async def test_clear_queue_pending(self, client):
-        respx.post("http://test-comfyui:8188/queue").mock(
-            return_value=httpx.Response(200, json={})
-        )
-        await client.clear_queue(clear_pending=True)
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_clear_queue_running(self, client):
-        respx.post("http://test-comfyui:8188/queue").mock(
-            return_value=httpx.Response(200, json={})
-        )
-        await client.clear_queue(clear_running=True)
-
-    @respx.mock
-    @pytest.mark.asyncio
     async def test_clear_queue_both(self, client):
-        respx.post("http://test-comfyui:8188/queue").mock(
+        route = respx.post("http://test-comfyui:8188/queue").mock(
             return_value=httpx.Response(200, json={})
         )
         await client.clear_queue(clear_running=True, clear_pending=True)
+        payload = json.loads(route.calls[0].request.content)
+        assert "running" in payload["clear"]
+        assert "pending" in payload["clear"]
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_upload_mask(self, client):
         respx.post("http://test-comfyui:8188/upload/mask").mock(
             return_value=httpx.Response(
@@ -235,3 +195,23 @@ class TestComfyUIClient:
         )
         result = await client.upload_mask(b"fake-mask-data", "mask.png")
         assert result["name"] == "mask.png"
+
+    @respx.mock
+    async def test_retry_on_connection_error(self, client):
+        route = respx.get("http://test-comfyui:8188/queue")
+        route.side_effect = [
+            httpx.ConnectError("Connection refused"),
+            httpx.Response(200, json={"queue_running": [], "queue_pending": []}),
+        ]
+        result = await client.get_queue()
+        assert "queue_running" in result
+        assert route.call_count == 2
+
+    @respx.mock
+    async def test_no_retry_on_http_error(self, client):
+        route = respx.get("http://test-comfyui:8188/queue").mock(
+            return_value=httpx.Response(500, json={"error": "Internal Server Error"})
+        )
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.get_queue()
+        assert route.call_count == 1

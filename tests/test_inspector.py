@@ -3,7 +3,6 @@
 import pytest
 
 from comfyui_mcp.security.inspector import (
-    InspectionResult,
     WorkflowInspector,
     WorkflowBlockedError,
 )
@@ -47,17 +46,15 @@ class TestWorkflowInspector:
         result = audit_inspector.inspect(workflow)
         assert len(result.warnings) > 0
         assert any("EvalNode" in w for w in result.warnings)
-        assert result.blocked is False
 
     def test_audit_mode_never_blocks(self, audit_inspector):
         workflow = _make_workflow("EvalNode", "ExecuteAnything")
         result = audit_inspector.inspect(workflow)
-        assert result.blocked is False
+        assert len(result.warnings) > 0
 
     def test_enforce_mode_allows_approved_nodes(self, enforce_inspector):
         workflow = _make_workflow("KSampler", "CLIPTextEncode")
         result = enforce_inspector.inspect(workflow)
-        assert result.blocked is False
         assert len(result.warnings) == 0
 
     def test_enforce_mode_blocks_unapproved_nodes(self, enforce_inspector):
@@ -80,6 +77,30 @@ class TestWorkflowInspector:
             "0": {
                 "class_type": "KSampler",
                 "inputs": {"code": "__import__('os').system('rm -rf /')"},
+            }
+        }
+        result = audit_inspector.inspect(workflow)
+        assert any("suspicious" in w.lower() for w in result.warnings)
+
+    def test_suspicious_input_nested_in_dict(self, audit_inspector):
+        workflow = {
+            "0": {
+                "class_type": "CustomNode",
+                "inputs": {
+                    "config": {"script": "exec('malicious')"},
+                },
+            }
+        }
+        result = audit_inspector.inspect(workflow)
+        assert any("suspicious" in w.lower() for w in result.warnings)
+
+    def test_suspicious_input_nested_in_list(self, audit_inspector):
+        workflow = {
+            "0": {
+                "class_type": "CustomNode",
+                "inputs": {
+                    "scripts": ["safe", "__import__('os').system('whoami')"],
+                },
             }
         }
         result = audit_inspector.inspect(workflow)

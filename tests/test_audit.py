@@ -1,8 +1,6 @@
 """Tests for structured audit logging."""
 
 import json
-from io import StringIO
-from pathlib import Path
 
 import pytest
 
@@ -28,6 +26,15 @@ class TestAuditRecord:
         assert data["tool"] == "run_workflow"
         assert "KSampler" in data["nodes_used"]
         assert len(data["warnings"]) == 1
+
+    def test_record_omits_empty_fields(self):
+        record = AuditRecord(tool="get_queue", action="called")
+        data = json.loads(record.model_dump_json())
+        assert set(data.keys()) == {"timestamp", "tool", "action"}
+        assert "prompt_id" not in data
+        assert "nodes_used" not in data
+        assert "warnings" not in data
+        assert "extra" not in data
 
     def test_record_never_contains_token(self):
         record = AuditRecord(

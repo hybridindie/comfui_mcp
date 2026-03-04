@@ -59,3 +59,41 @@ class TestPathSanitizer:
     def test_backslash_traversal_blocked(self, sanitizer):
         with pytest.raises(PathValidationError, match="traversal"):
             sanitizer.validate_filename("..\\..\\windows\\system32")
+
+
+class TestSubfolderValidation:
+    @pytest.fixture
+    def sanitizer(self):
+        return PathSanitizer(
+            allowed_extensions=[".png", ".jpg"],
+            max_size_mb=50,
+        )
+
+    def test_empty_subfolder_passes(self, sanitizer):
+        assert sanitizer.validate_subfolder("") == ""
+
+    def test_simple_subfolder_passes(self, sanitizer):
+        assert sanitizer.validate_subfolder("inputs") == "inputs"
+
+    def test_nested_subfolder_passes(self, sanitizer):
+        assert sanitizer.validate_subfolder("inputs/masks") == "inputs/masks"
+
+    def test_traversal_blocked(self, sanitizer):
+        with pytest.raises(PathValidationError, match="traversal"):
+            sanitizer.validate_subfolder("../../../etc")
+
+    def test_null_byte_blocked(self, sanitizer):
+        with pytest.raises(PathValidationError, match="null"):
+            sanitizer.validate_subfolder("inputs\x00evil")
+
+    def test_absolute_path_stripped(self, sanitizer):
+        result = sanitizer.validate_subfolder("/inputs/")
+        assert not result.startswith("/")
+
+    def test_encoded_traversal_blocked(self, sanitizer):
+        with pytest.raises(PathValidationError, match="traversal"):
+            sanitizer.validate_subfolder("..%2F..%2Fetc")
+
+    def test_control_characters_blocked(self, sanitizer):
+        with pytest.raises(PathValidationError, match="invalid"):
+            sanitizer.validate_subfolder("inputs\nmalicious")

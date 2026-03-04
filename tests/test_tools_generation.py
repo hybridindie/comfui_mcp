@@ -49,7 +49,6 @@ def enforce_components(tmp_path):
 
 class TestRunWorkflow:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_submits_workflow(self, components):
         client, audit, limiter, inspector = components
         respx.post("http://test:8188/prompt").mock(
@@ -62,7 +61,6 @@ class TestRunWorkflow:
         assert "abc-123" in result
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_audit_mode_logs_dangerous_nodes(self, components):
         client, audit, limiter, inspector = components
         respx.post("http://test:8188/prompt").mock(
@@ -72,10 +70,9 @@ class TestRunWorkflow:
         tools = register_generation_tools(mcp, client, audit, limiter, inspector)
         workflow = {"1": {"class_type": "EvalNode", "inputs": {}}}
         result = await tools["run_workflow"](workflow=json.dumps(workflow))
-        # Should succeed in audit mode but log warnings
         assert "abc-123" in result
+        assert "EvalNode" in result
 
-    @pytest.mark.asyncio
     async def test_enforce_mode_blocks_unapproved(self, enforce_components):
         client, audit, limiter, inspector = enforce_components
         mcp = FastMCP("test")
@@ -87,7 +84,6 @@ class TestRunWorkflow:
 
 class TestGenerateImage:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_generate_image_submits_default_workflow(self, components):
         client, audit, limiter, inspector = components
         respx.post("http://test:8188/prompt").mock(
@@ -99,3 +95,31 @@ class TestGenerateImage:
             prompt="a beautiful sunset over mountains"
         )
         assert "img-001" in result
+
+    async def test_rejects_invalid_width(self, components):
+        client, audit, limiter, inspector = components
+        mcp = FastMCP("test")
+        tools = register_generation_tools(mcp, client, audit, limiter, inspector)
+        with pytest.raises(ValueError, match="width"):
+            await tools["generate_image"](prompt="test", width=10)
+
+    async def test_rejects_invalid_height(self, components):
+        client, audit, limiter, inspector = components
+        mcp = FastMCP("test")
+        tools = register_generation_tools(mcp, client, audit, limiter, inspector)
+        with pytest.raises(ValueError, match="height"):
+            await tools["generate_image"](prompt="test", height=5000)
+
+    async def test_rejects_invalid_steps(self, components):
+        client, audit, limiter, inspector = components
+        mcp = FastMCP("test")
+        tools = register_generation_tools(mcp, client, audit, limiter, inspector)
+        with pytest.raises(ValueError, match="steps"):
+            await tools["generate_image"](prompt="test", steps=0)
+
+    async def test_rejects_invalid_cfg(self, components):
+        client, audit, limiter, inspector = components
+        mcp = FastMCP("test")
+        tools = register_generation_tools(mcp, client, audit, limiter, inspector)
+        with pytest.raises(ValueError, match="cfg"):
+            await tools["generate_image"](prompt="test", cfg=0.5)

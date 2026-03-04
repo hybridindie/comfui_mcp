@@ -21,7 +21,6 @@ def components(tmp_path):
 
 class TestGetQueue:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_returns_queue_state(self, components):
         client, audit, limiter = components
         respx.get("http://test:8188/queue").mock(
@@ -37,7 +36,6 @@ class TestGetQueue:
 
 class TestCancelJob:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_cancel_job_sends_delete(self, components):
         client, audit, limiter = components
         route = respx.post("http://test:8188/queue").mock(
@@ -51,7 +49,6 @@ class TestCancelJob:
 
 class TestInterrupt:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_interrupt_posts(self, components):
         client, audit, limiter = components
         route = respx.post("http://test:8188/interrupt").mock(
@@ -65,7 +62,6 @@ class TestInterrupt:
 
 class TestGetJob:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_get_job_returns_history_item(self, components):
         client, audit, limiter = components
         respx.get("http://test:8188/history/abc-123").mock(
@@ -81,7 +77,6 @@ class TestGetJob:
 
 class TestGetQueueStatus:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_get_queue_status_returns_exec_info(self, components):
         client, audit, limiter = components
         respx.get("http://test:8188/prompt").mock(
@@ -95,7 +90,6 @@ class TestGetQueueStatus:
 
 class TestClearQueue:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_clear_queue_pending(self, components):
         client, audit, limiter = components
         route = respx.post("http://test:8188/queue").mock(

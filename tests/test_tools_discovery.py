@@ -31,7 +31,6 @@ def components_with_auditor(tmp_path):
 
 class TestListModels:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_list_models_returns_models(self, components):
         client, audit, limiter = components
         respx.get("http://test:8188/models/checkpoints").mock(
@@ -46,7 +45,6 @@ class TestListModels:
 
 class TestListNodes:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_list_nodes_returns_node_types(self, components):
         client, audit, limiter = components
         respx.get("http://test:8188/object_info").mock(
@@ -64,7 +62,6 @@ class TestListNodes:
 
 class TestListExtensions:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_list_extensions(self, components):
         client, audit, limiter = components
         respx.get("http://test:8188/extensions").mock(
@@ -79,7 +76,6 @@ class TestListExtensions:
 
 class TestGetServerFeatures:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_get_server_features(self, components):
         client, audit, limiter = components
         respx.get("http://test:8188/features").mock(
@@ -94,7 +90,6 @@ class TestGetServerFeatures:
 
 class TestListModelFolders:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_list_model_folders(self, components):
         client, audit, limiter = components
         respx.get("http://test:8188/models").mock(
@@ -110,7 +105,6 @@ class TestListModelFolders:
 
 class TestGetModelMetadata:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_get_model_metadata(self, components):
         client, audit, limiter = components
         respx.get("http://test:8188/view_metadata/checkpoints").mock(
@@ -127,7 +121,6 @@ class TestGetModelMetadata:
 
 class TestAuditDangerousNodes:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_audit_dangerous_nodes(self, components_with_auditor):
         client, audit, limiter, auditor = components_with_auditor
         respx.get("http://test:8188/object_info").mock(
@@ -151,7 +144,6 @@ class TestAuditDangerousNodes:
         assert "RunPython" in [n["class"] for n in result["dangerous"]["nodes"]]
 
     @respx.mock
-    @pytest.mark.asyncio
     async def test_audit_dangerous_nodes_without_auditor(self, components):
         client, audit, limiter = components
         respx.get("http://test:8188/object_info").mock(

@@ -28,7 +28,6 @@ def components(tmp_path):
 
 class TestUploadImage:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_upload_valid_image(self, components):
         client, audit, limiter, sanitizer = components
         respx.post("http://test:8188/upload/image").mock(
@@ -42,7 +41,6 @@ class TestUploadImage:
         result = await tools["upload_image"](filename="test.png", image_data=image_b64)
         assert "test.png" in result
 
-    @pytest.mark.asyncio
     async def test_upload_path_traversal_blocked(self, components):
         client, audit, limiter, sanitizer = components
         mcp = FastMCP("test")
@@ -53,7 +51,6 @@ class TestUploadImage:
                 filename="../../etc/passwd.png", image_data=image_b64
             )
 
-    @pytest.mark.asyncio
     async def test_upload_bad_extension_blocked(self, components):
         client, audit, limiter, sanitizer = components
         mcp = FastMCP("test")
@@ -65,7 +62,6 @@ class TestUploadImage:
 
 class TestGetImage:
     @respx.mock
-    @pytest.mark.asyncio
     async def test_get_image_returns_base64(self, components):
         client, audit, limiter, sanitizer = components
         respx.get("http://test:8188/view").mock(
@@ -78,7 +74,6 @@ class TestGetImage:
         result = await tools["get_image"](filename="output.png")
         assert "base64" in result or "image" in result.lower()
 
-    @pytest.mark.asyncio
     async def test_get_image_traversal_blocked(self, components):
         client, audit, limiter, sanitizer = components
         mcp = FastMCP("test")
