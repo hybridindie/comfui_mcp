@@ -48,6 +48,11 @@ pyproject.toml            # Project config (hatchling build)
 uv sync                    # Install dependencies
 uv run pytest -v           # Run tests
 uv run pytest --cov=src/comfyui_mcp --cov-report=term-missing  # Coverage
+uv run ruff check src/ tests/         # Lint
+uv run ruff format src/ tests/        # Format (in-place)
+uv run ruff format --check src/ tests/  # Format check (CI)
+uv run mypy src/comfyui_mcp/          # Type check
+uv run pre-commit run --all-files     # Run all pre-commit hooks
 ```
 
 ## Rules
@@ -62,6 +67,12 @@ These are non-negotiable. This is a security-focused project.
 4. **All tools must audit log.** Every tool function must call `audit.log(tool="...", action="...")` with structured data. Sensitive fields are auto-redacted but never log raw user secrets intentionally.
 5. **Workflow execution must go through the inspector.** Any tool that submits a workflow via `client.post_prompt()` must first call `inspector.inspect()` and include warnings in the response.
 6. **No new dependencies without a real import.** Every dependency in `pyproject.toml` must be imported somewhere in `src/`. Do not add speculative or "might need later" dependencies.
+
+### Lint and format rules
+
+17. **All code must pass `ruff check` and `ruff format --check`.** Run `uv run ruff check src/ tests/` and `uv run ruff format --check src/ tests/` before committing. Ruff auto-fix (`--fix`) is safe to use.
+18. **All source code must pass `mypy`.** Run `uv run mypy src/comfyui_mcp/` before committing. Add type annotations to new code. Use `# type: ignore[code]` only when the type stub is wrong, and always include the specific error code.
+19. **Pre-commit hooks must pass.** Run `uv run pre-commit run --all-files` to verify. Hooks are installed via `uv run pre-commit install`.
 
 ### Code rules
 
