@@ -34,16 +34,16 @@ cd comfyui_mcp
 uv sync
 ```
 
-**Option B: Docker**
+**Option B: Docker (no clone required)**
+
+```bash
+docker pull ghcr.io/hybridindie/comfyui-mcp:latest
+```
+
+Or build locally from the repo:
 
 ```bash
 docker build -t comfyui-mcp .
-```
-
-Or with Docker Compose:
-
-```bash
-docker compose build
 ```
 
 ### Configure
@@ -84,7 +84,7 @@ The MCP server communicates over stdio. Add one of the following configurations 
 }
 ```
 
-**Docker:**
+**Docker (GitHub Container Registry):**
 
 ```json
 {
@@ -95,7 +95,7 @@ The MCP server communicates over stdio. Add one of the following configurations 
         "run", "--rm", "-i",
         "-e", "COMFYUI_URL=http://host.docker.internal:8188",
         "-v", "~/.comfyui-mcp:/root/.comfyui-mcp:ro",
-        "comfyui-mcp"
+        "ghcr.io/hybridindie/comfyui-mcp:latest"
       ]
     }
   }
@@ -111,7 +111,7 @@ The MCP server communicates over stdio. Add one of the following configurations 
 uv run python -c "from comfyui_mcp.server import mcp; print(f'Server {mcp.name!r} ready')"
 
 # Docker
-docker run --rm -i comfyui-mcp --help
+docker run --rm ghcr.io/hybridindie/comfyui-mcp:latest --help
 ```
 
 ## Tools
@@ -466,19 +466,27 @@ uv run pytest -v
 
 ## Docker
 
-The Docker image runs the MCP server over stdio, making it compatible with Claude Code, Claude Desktop, and any MCP client.
+A pre-built Docker image is published to the GitHub Container Registry. No need to clone the repo.
+
+```bash
+docker pull ghcr.io/hybridindie/comfyui-mcp:latest
+```
 
 ### How it works
 
-The container runs `uv run comfyui-mcp` as its entrypoint, communicating over stdin/stdout. Config is read from `/root/.comfyui-mcp/config.yaml` inside the container — mount your local config directory to provide it, or use environment variables.
+The container runs `uv run comfyui-mcp` as its entrypoint, communicating over stdin/stdout (stdio). This makes it compatible with Claude Code, Claude Desktop, and any MCP client. Config is read from `/root/.comfyui-mcp/config.yaml` inside the container — mount your local config directory to provide it, or use environment variables.
 
 ### Running standalone
 
 ```bash
-# Build
-docker build -t comfyui-mcp .
+# Using the hosted image
+docker run --rm -i \
+  -e COMFYUI_URL=http://host.docker.internal:8188 \
+  -v ~/.comfyui-mcp:/root/.comfyui-mcp:ro \
+  ghcr.io/hybridindie/comfyui-mcp:latest
 
-# Run interactively (stdio mode for MCP clients)
+# Or build and run locally
+docker build -t comfyui-mcp .
 docker run --rm -i \
   -e COMFYUI_URL=http://host.docker.internal:8188 \
   -v ~/.comfyui-mcp:/root/.comfyui-mcp:ro \
@@ -527,6 +535,7 @@ See the [Docker configuration](#add-to-claude-code--claude-desktop) in Quick Sta
 - Mount your config: `-v ~/.comfyui-mcp:/root/.comfyui-mcp:ro`
 - Set `COMFYUI_URL` to reach your ComfyUI instance from inside the container
 - Use `host.docker.internal` to reach ComfyUI running on your host machine
+- The GHCR image (`ghcr.io/hybridindie/comfyui-mcp:latest`) means no local build needed
 
 ## License
 
