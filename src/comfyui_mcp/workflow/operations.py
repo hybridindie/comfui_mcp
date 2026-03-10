@@ -26,6 +26,8 @@ def _apply_add_node(workflow: dict[str, Any], op: dict[str, Any]) -> None:
     if node_id in workflow:
         raise ValueError(f"Node '{node_id}' already exists")
     inputs = op.get("inputs", {})
+    if not isinstance(inputs, dict):
+        raise ValueError("add_node 'inputs' must be a dict")
     workflow[node_id] = {"class_type": class_type, "inputs": inputs}
 
 
@@ -60,8 +62,8 @@ def _apply_set_input(workflow: dict[str, Any], op: dict[str, Any]) -> None:
     if node_id not in workflow:
         raise ValueError(f"Node '{node_id}' not found")
     input_name = op.get("input_name")
-    if not input_name:
-        raise ValueError("set_input requires 'input_name'")
+    if not isinstance(input_name, str) or not input_name:
+        raise ValueError("set_input requires a non-empty string 'input_name'")
     if "value" not in op:
         raise ValueError("set_input requires 'value'")
     workflow[node_id]["inputs"][input_name] = op["value"]
@@ -83,8 +85,8 @@ def _apply_connect(workflow: dict[str, Any], op: dict[str, Any]) -> None:
     if not isinstance(from_output, int) or from_output < 0:
         raise ValueError("connect requires 'from_output' to be a non-negative integer")
     to_input = op.get("to_input")
-    if not to_input:
-        raise ValueError("connect requires non-empty 'to_input'")
+    if not isinstance(to_input, str) or not to_input:
+        raise ValueError("connect requires a non-empty string 'to_input'")
     workflow[to_node]["inputs"][to_input] = [from_node, from_output]
 
 

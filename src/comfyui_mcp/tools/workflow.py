@@ -86,7 +86,7 @@ def register_workflow_tools(
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON operations: {e}") from e
 
-        if not isinstance(ops, list):
+        if not isinstance(ops, list) or not all(isinstance(op, dict) for op in ops):
             raise ValueError("Operations must be a JSON array of operation objects")
 
         result = apply_operations(wf, ops)

@@ -224,12 +224,15 @@ async def validate_workflow(
     except graphlib.CycleError as e:
         errors.append(f"Workflow contains a cycle: {e}")
 
-    # --- Server checks (best-effort) ---
+    # --- Server checks (best-effort, skip if structural errors already found) ---
     object_info: dict[str, Any] | None = None
-    with contextlib.suppress(httpx.HTTPError, OSError):
-        object_info = await client.get_object_info()
+    if not errors:
+        with contextlib.suppress(httpx.HTTPError, OSError):
+            object_info = await client.get_object_info()
 
-    if object_info is None:
+    if errors:
+        pass  # Skip server checks — structural errors already found
+    elif object_info is None:
         warnings.append("ComfyUI server unreachable — server validation skipped")
     else:
         for node_id, node_data in workflow.items():
@@ -273,7 +276,7 @@ async def validate_workflow(
         result = inspector.inspect(workflow)
         warnings.extend(result.warnings)
     except WorkflowBlockedError as e:
-        errors.append(f"Security: workflow blocked — {e}")
+        errors.append(f"Security: {e}")
     except Exception as e:
         errors.append(f"Security inspection failed due to an internal error: {e}")
 

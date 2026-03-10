@@ -102,4 +102,4 @@ Test file: `tests/test_tools_workflow.py`
 - **Validation:** Structural errors (missing class_type, broken connections, cycles). Server checks (missing nodes, missing models — mock endpoints). Security warnings. Graceful degradation when server unreachable.
 - **Integration:** create → modify → validate round-trip. Create txt2img → add LoRA → connect → validate passes.
 
-All tests use `respx` mocks. No real HTTP calls.
+Tests should use `respx` mocks so no real HTTP calls are made.

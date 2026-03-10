@@ -59,12 +59,14 @@ class TestStructuralValidation:
         assert result["valid"] is True
         assert result["errors"] == []
 
+    @respx.mock
     async def test_missing_class_type_is_error(self, client, inspector):
         wf = {"1": {"inputs": {"x": 1}}}
         result = await validate_workflow(wf, client, inspector)
         assert result["valid"] is False
         assert any("class_type" in e for e in result["errors"])
 
+    @respx.mock
     async def test_broken_connection_is_error(self, client, inspector):
         wf = {
             "1": {
@@ -76,6 +78,7 @@ class TestStructuralValidation:
         assert result["valid"] is False
         assert any("99" in e for e in result["errors"])
 
+    @respx.mock
     async def test_cycle_is_error(self, client, inspector):
         wf = {
             "1": {"class_type": "A", "inputs": {"x": ["2", 0]}},
