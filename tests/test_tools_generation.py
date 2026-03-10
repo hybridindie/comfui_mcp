@@ -12,10 +12,10 @@ from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.security.inspector import WorkflowBlockedError, WorkflowInspector
 from comfyui_mcp.security.rate_limit import RateLimiter
 from comfyui_mcp.tools.generation import (
-    _analyze_workflow,
     _format_summary,
     register_generation_tools,
 )
+from comfyui_mcp.workflow.validation import analyze_workflow as _analyze_workflow
 
 
 @pytest.fixture
