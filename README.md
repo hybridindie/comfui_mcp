@@ -122,6 +122,7 @@ docker run --rm ghcr.io/hybridindie/comfyui-mcp:latest --help
 |------|-------------|
 | `generate_image` | Text-to-image using a built-in workflow. Params: prompt, negative_prompt, width, height, steps, cfg, model. |
 | `run_workflow` | Submit arbitrary ComfyUI workflow JSON. Inspected for dangerous nodes before execution. |
+| `summarize_workflow` | Summarize a workflow's structure, data flow, models, and parameters. |
 
 ### Job Management
 
@@ -450,7 +451,7 @@ src/comfyui_mcp/
 │   ├── sanitizer.py       # File path validation
 │   └── rate_limit.py      # Token-bucket rate limiter
 └── tools/
-    ├── generation.py      # generate_image, run_workflow
+    ├── generation.py      # generate_image, run_workflow, summarize_workflow
     ├── jobs.py            # get_queue, get_job, cancel_job, interrupt, clear_queue
     ├── discovery.py       # list_models, list_nodes, audit_dangerous_nodes, etc.
     ├── history.py         # get_history
