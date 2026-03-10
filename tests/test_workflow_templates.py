@@ -76,6 +76,71 @@ class TestImg2ImgTemplate:
         assert sampler[0]["inputs"]["denoise"] == 0.6
 
 
+class TestUpscaleTemplate:
+    def test_returns_valid_workflow(self):
+        wf = create_from_template("upscale")
+        class_types = {v["class_type"] for v in wf.values()}
+        assert "LoadImage" in class_types
+        assert "UpscaleModelLoader" in class_types
+        assert "ImageUpscaleWithModel" in class_types
+        assert "SaveImage" in class_types
+
+    def test_model_name_override(self):
+        wf = create_from_template("upscale", {"model_name": "4x_NMKD-Superscale-SP_178000_G.pth"})
+        loader = _get_nodes_by_type(wf, "UpscaleModelLoader")
+        assert loader[0]["inputs"]["model_name"] == "4x_NMKD-Superscale-SP_178000_G.pth"
+
+
+class TestInpaintTemplate:
+    def test_returns_valid_workflow(self):
+        wf = create_from_template("inpaint")
+        class_types = {v["class_type"] for v in wf.values()}
+        assert "LoadImage" in class_types
+        assert "LoadImageMask" in class_types
+        assert "SetLatentNoiseMask" in class_types
+        assert "KSampler" in class_types
+        assert "VAEDecode" in class_types
+
+
+class TestTxt2VidAnimateDiffTemplate:
+    def test_returns_valid_workflow(self):
+        wf = create_from_template("txt2vid_animatediff")
+        class_types = {v["class_type"] for v in wf.values()}
+        assert "ADE_AnimateDiffLoaderWithContext" in class_types
+        assert "KSampler" in class_types
+        assert "SaveAnimatedWEBP" in class_types
+
+    def test_frames_param(self):
+        wf = create_from_template("txt2vid_animatediff", {"frames": 32})
+        latent = _get_nodes_by_type(wf, "EmptyLatentImage")
+        assert latent[0]["inputs"]["batch_size"] == 32
+
+    def test_motion_module_param(self):
+        wf = create_from_template("txt2vid_animatediff", {"motion_module": "mm_sd15_v3.ckpt"})
+        ad = _get_nodes_by_type(wf, "ADE_AnimateDiffLoaderWithContext")
+        assert ad[0]["inputs"]["model_name"] == "mm_sd15_v3.ckpt"
+
+
+class TestTxt2VidWanTemplate:
+    def test_returns_valid_workflow(self):
+        wf = create_from_template("txt2vid_wan")
+        class_types = {v["class_type"] for v in wf.values()}
+        assert "DownloadAndLoadWanModel" in class_types
+        assert "WanTextToVideo" in class_types
+        assert "SaveAnimatedWEBP" in class_types
+
+    def test_dimensions_param(self):
+        wf = create_from_template("txt2vid_wan", {"width": 1280, "height": 720})
+        wan = _get_nodes_by_type(wf, "WanTextToVideo")
+        assert wan[0]["inputs"]["width"] == 1280
+        assert wan[0]["inputs"]["height"] == 720
+
+    def test_frames_param(self):
+        wf = create_from_template("txt2vid_wan", {"frames": 49})
+        wan = _get_nodes_by_type(wf, "WanTextToVideo")
+        assert wan[0]["inputs"]["num_frames"] == 49
+
+
 class TestInvalidTemplate:
     def test_invalid_template_raises(self):
         with pytest.raises(ValueError, match="Unknown template"):
