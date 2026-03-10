@@ -1,6 +1,9 @@
 """Tests for file operation MCP tools."""
 
 import base64
+import json
+import struct
+import zlib
 
 import httpx
 import pytest
@@ -11,7 +14,58 @@ from comfyui_mcp.audit import AuditLogger
 from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.security.rate_limit import RateLimiter
 from comfyui_mcp.security.sanitizer import PathSanitizer, PathValidationError
-from comfyui_mcp.tools.files import register_file_tools
+from comfyui_mcp.tools.files import _extract_png_metadata, register_file_tools
+
+
+def _build_chunk(chunk_type: bytes, data: bytes) -> bytes:
+    """Build a PNG chunk: length + type + data + CRC."""
+    import binascii
+
+    chunk_body = chunk_type + data
+    crc = binascii.crc32(chunk_body) & 0xFFFFFFFF
+    return struct.pack(">I", len(data)) + chunk_body + struct.pack(">I", crc)
+
+
+def _build_png_with_text_chunks(text_chunks: dict[str, str]) -> bytes:
+    """Build a minimal valid PNG with tEXt chunks for testing."""
+    png_signature = b"\x89PNG\r\n\x1a\n"
+
+    # Minimal IHDR chunk (13 bytes of data)
+    ihdr_data = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)  # 1x1 RGB
+    ihdr = _build_chunk(b"IHDR", ihdr_data)
+
+    # tEXt chunks
+    text_chunks_bytes = b""
+    for key, value in text_chunks.items():
+        chunk_data = key.encode("latin-1") + b"\x00" + value.encode("latin-1")
+        text_chunks_bytes += _build_chunk(b"tEXt", chunk_data)
+
+    # Minimal IDAT chunk (empty compressed data)
+    idat = _build_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+
+    # IEND chunk
+    iend = _build_chunk(b"IEND", b"")
+
+    return png_signature + ihdr + text_chunks_bytes + idat + iend
+
+
+def _build_png_with_ztxt_chunks(text_chunks: dict[str, str]) -> bytes:
+    """Build a minimal valid PNG with zTXt chunks for testing."""
+    png_signature = b"\x89PNG\r\n\x1a\n"
+
+    ihdr_data = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+    ihdr = _build_chunk(b"IHDR", ihdr_data)
+
+    ztxt_chunks_bytes = b""
+    for key, value in text_chunks.items():
+        compressed = zlib.compress(value.encode("utf-8"))
+        chunk_data = key.encode("latin-1") + b"\x00" + b"\x00" + compressed
+        ztxt_chunks_bytes += _build_chunk(b"zTXt", chunk_data)
+
+    idat = _build_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+    iend = _build_chunk(b"IEND", b"")
+
+    return png_signature + ihdr + ztxt_chunks_bytes + idat + iend
 
 
 @pytest.fixture
@@ -78,3 +132,35 @@ class TestGetImage:
         tools = register_file_tools(mcp, client, audit, limiter, sanitizer)
         with pytest.raises(PathValidationError):
             await tools["get_image"](filename="../../../etc/shadow.png")
+
+
+class TestExtractPngMetadata:
+    def test_extracts_text_chunks(self):
+        workflow = json.dumps({"1": {"class_type": "KSampler", "inputs": {}}})
+        prompt = json.dumps({"1": {"class_type": "KSampler", "inputs": {}}})
+        png_data = _build_png_with_text_chunks({"workflow": workflow, "prompt": prompt})
+        result = _extract_png_metadata(png_data)
+        assert "workflow" in result
+        assert "prompt" in result
+        assert result["workflow"] == workflow
+        assert result["prompt"] == prompt
+
+    def test_extracts_ztxt_compressed_chunks(self):
+        workflow = json.dumps({"1": {"class_type": "KSampler", "inputs": {}}})
+        png_data = _build_png_with_ztxt_chunks({"workflow": workflow})
+        result = _extract_png_metadata(png_data)
+        assert "workflow" in result
+        assert result["workflow"] == workflow
+
+    def test_returns_empty_for_no_metadata(self):
+        png_data = _build_png_with_text_chunks({})
+        result = _extract_png_metadata(png_data)
+        assert result == {}
+
+    def test_returns_empty_for_non_png(self):
+        result = _extract_png_metadata(b"not a png file at all")
+        assert result == {}
+
+    def test_returns_empty_for_truncated_png(self):
+        result = _extract_png_metadata(b"\x89PNG\r\n\x1a\n\x00")
+        assert result == {}

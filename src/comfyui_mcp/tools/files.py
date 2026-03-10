@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+import struct
+import zlib
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -11,6 +13,59 @@ from comfyui_mcp.audit import AuditLogger
 from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.security.rate_limit import RateLimiter
 from comfyui_mcp.security.sanitizer import PathSanitizer
+
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def _extract_png_metadata(data: bytes) -> dict[str, str]:
+    """Extract tEXt and zTXt metadata from PNG data.
+
+    Returns a dict of key-value pairs from PNG text chunks.
+    Returns an empty dict if the data is not valid PNG or has no text chunks.
+    """
+    if len(data) < 8 or data[:8] != _PNG_SIGNATURE:
+        return {}
+
+    metadata: dict[str, str] = {}
+    offset = 8  # Skip PNG signature
+
+    while offset + 8 <= len(data):
+        try:
+            length = struct.unpack(">I", data[offset : offset + 4])[0]
+        except struct.error:
+            break
+        chunk_type = data[offset + 4 : offset + 8]
+        chunk_data = data[offset + 8 : offset + 8 + length]
+
+        if len(chunk_data) < length:
+            break  # Truncated chunk
+
+        if chunk_type == b"tEXt":
+            null_idx = chunk_data.find(b"\x00")
+            if null_idx > 0:
+                key = chunk_data[:null_idx].decode("latin-1")
+                value = chunk_data[null_idx + 1 :].decode("latin-1")
+                metadata[key] = value
+
+        elif chunk_type == b"zTXt":
+            null_idx = chunk_data.find(b"\x00")
+            if null_idx > 0 and null_idx + 2 <= len(chunk_data):
+                key = chunk_data[:null_idx].decode("latin-1")
+                # Skip compression method byte (always 0 = zlib)
+                compressed = chunk_data[null_idx + 2 :]
+                try:
+                    value = zlib.decompress(compressed).decode("utf-8")
+                    metadata[key] = value
+                except (zlib.error, UnicodeDecodeError):
+                    pass
+
+        elif chunk_type == b"IEND":
+            break
+
+        # Move to next chunk: length(4) + type(4) + data(length) + crc(4)
+        offset += 12 + length
+
+    return metadata
 
 
 def register_file_tools(
