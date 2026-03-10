@@ -11,7 +11,7 @@ This server adds five security layers between the AI assistant and ComfyUI:
 | Layer | What it does |
 |-------|-------------|
 | **Workflow Inspector** | Parses every workflow before execution, extracts node types, flags dangerous patterns (`eval`, `exec`, `__import__`, `subprocess`). Configurable audit-only or enforcement mode. |
-| **Path Sanitizer** | Validates all filenames — blocks path traversal (`../`), null bytes, percent-encoded attacks, absolute paths, and disallowed file extensions. |
+| **Path Sanitizer** | Validates all filenames, subfolders, and URL path segments — blocks path traversal (`../`), null bytes, percent-encoded attacks, absolute paths, and disallowed file extensions. |
 | **Rate Limiter** | Token-bucket rate limiting per tool category to prevent runaway loops. |
 | **Audit Logger** | Structured JSON logging of every operation with automatic redaction of sensitive fields (tokens, passwords). |
 | **Selective API Surface** | Only exposes safe ComfyUI endpoints. Dangerous endpoints (`/userdata`, `/free`, `/users`, `/system_stats`) are never proxied. |
@@ -27,8 +27,8 @@ This server adds five security layers between the AI assistant and ComfyUI:
 ### Install
 
 ```bash
-git clone https://github.com/yourusername/comfyui-mcp.git
-cd comfyui-mcp
+git clone https://github.com/hybridindie/comfyui_mcp.git
+cd comfyui_mcp
 uv sync
 ```
 
@@ -148,14 +148,14 @@ comfyui:
 security:
   mode: "audit"                    # "audit" (log only) or "enforce" (block unapproved)
   allowed_nodes: []                # Enforce mode: only these nodes can run
-  dangerous_nodes:                 # Always flagged in audit log
-    - "ExecuteAnything"
-    - "EvalNode"
-    - "ExecNode"
-    - "PythonExec"
-    - "RunPython"
-    - "ShellNode"
-    - "CommandExecutor"
+  dangerous_nodes:                 # Always flagged in audit log (showing subset)
+    - "Terminal"                   # comfyui-colab: shell via subprocess
+    - "interpreter_tool"           # comfyui_LLM_party: exec/eval
+    - "KY_Eval_Python"             # ComfyUI-KYNode: exec Python
+    - "Image Send HTTP"            # was-node-suite: arbitrary HTTP
+    - "Load Text File"             # was-node-suite: reads arbitrary files
+    - "Save Text File"             # was-node-suite: writes arbitrary files
+    # ... see config.py _DEFAULT_DANGEROUS_NODES for the full list
   max_upload_size_mb: 50
   allowed_extensions:
     - ".png"
@@ -172,7 +172,6 @@ rate_limits:                       # Requests per minute
   read_only: 60
 
 logging:
-  level: "INFO"
   audit_file: "~/.comfyui-mcp/audit.log"
 
 transport:
@@ -323,7 +322,8 @@ Sensitive fields (`token`, `password`, `secret`, `api_key`, `authorization`) are
 - Limitation: static blocklist can be bypassed with obfuscation or unknown custom nodes
 
 **Path Sanitizer** (`security/sanitizer.py`)
-- Validates filenames and subfolders: blocks path traversal, null bytes, absolute paths, control characters
+- Validates filenames, subfolders, and URL path segments: blocks path traversal, null bytes, absolute paths, control characters
+- URL path segment validation on discovery tools (`list_models`, `get_model_metadata`) prevents folder/filename injection
 - Allowlist-based extension filtering (default: `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.json`)
 - Handles percent-encoded inputs (URL decoding before validation)
 - Enforces max upload size (default 50MB), max filename length (255 chars)
@@ -440,17 +440,24 @@ docker run -d \
 
 ### Using Docker Compose
 
+A `docker-compose.yml` is included in the repo:
+
 ```yaml
 services:
   comfyui-mcp:
-    image: ghcr.io/hybridindie/comfyui-mcp:latest
-    volumes:
-      - ~/.comfyui-mcp:/root/.comfyui-mcp:ro
+    build: .
+    image: comfyui-mcp:latest
+    container_name: comfyui-mcp
     environment:
-      - COMFYUI_URL=http://comfyui:8188
-      - COMFYUI_SECURITY_MODE=audit
-    stdin_open: true
-    tty: true
+      - COMFYUI_URL=${COMFYUI_URL:-http://comfyui:8188}
+      - COMFYUI_SECURITY_MODE=${COMFYUI_SECURITY_MODE:-audit}
+    volumes:
+      - ./config.yaml:/root/.comfyui-mcp/config.yaml:ro
+      - comfyui-mcp-data:/root/.comfyui-mcp/logs
+    restart: unless-stopped
+
+volumes:
+  comfyui-mcp-data:
 ```
 
 ### Project structure
