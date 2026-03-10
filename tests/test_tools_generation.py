@@ -11,7 +11,7 @@ from comfyui_mcp.audit import AuditLogger
 from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.security.inspector import WorkflowBlockedError, WorkflowInspector
 from comfyui_mcp.security.rate_limit import RateLimiter
-from comfyui_mcp.tools.generation import register_generation_tools
+from comfyui_mcp.tools.generation import _analyze_workflow, register_generation_tools
 
 
 @pytest.fixture
@@ -121,3 +121,125 @@ class TestGenerateImage:
         tools = register_generation_tools(mcp, client, audit, limiter, inspector)
         with pytest.raises(ValueError, match="cfg"):
             await tools["generate_image"](prompt="test", cfg=0.5)
+
+
+class TestAnalyzeWorkflow:
+    def test_analyzes_default_txt2img(self):
+        workflow = {
+            "3": {
+                "class_type": "KSampler",
+                "inputs": {
+                    "seed": 0,
+                    "steps": 20,
+                    "cfg": 7.0,
+                    "sampler_name": "euler",
+                    "scheduler": "normal",
+                    "denoise": 1.0,
+                    "model": ["4", 0],
+                    "positive": ["6", 0],
+                    "negative": ["7", 0],
+                    "latent_image": ["5", 0],
+                },
+            },
+            "4": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": "v1-5-pruned-emaonly.safetensors"},
+            },
+            "5": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"width": 512, "height": 512, "batch_size": 1},
+            },
+            "6": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "a cat", "clip": ["4", 1]},
+            },
+            "7": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "bad quality", "clip": ["4", 1]},
+            },
+            "8": {
+                "class_type": "VAEDecode",
+                "inputs": {"samples": ["3", 0], "vae": ["4", 2]},
+            },
+            "9": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "comfyui-mcp", "images": ["8", 0]},
+            },
+        }
+        result = _analyze_workflow(workflow, object_info=None)
+
+        assert result["node_count"] == 7
+        assert "CheckpointLoaderSimple" in result["class_types"]
+        assert {"name": "v1-5-pruned-emaonly.safetensors", "type": "checkpoint"} in result["models"]
+        assert result["parameters"]["steps"] == 20
+        assert result["parameters"]["cfg"] == 7.0
+        assert result["parameters"]["sampler"] == "euler"
+        assert result["parameters"]["width"] == 512
+        assert result["parameters"]["height"] == 512
+        # Flow should be topologically sorted
+        flow = [n["class_type"] for n in result["flow"]]
+        assert flow.index("CheckpointLoaderSimple") < flow.index("KSampler")
+        assert flow.index("KSampler") < flow.index("VAEDecode")
+        assert flow.index("VAEDecode") < flow.index("SaveImage")
+
+    def test_extracts_multiple_models(self):
+        workflow = {
+            "1": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": "dreamshaper_v8.safetensors"},
+            },
+            "2": {
+                "class_type": "LoraLoader",
+                "inputs": {
+                    "lora_name": "add-detail.safetensors",
+                    "model": ["1", 0],
+                    "clip": ["1", 1],
+                },
+            },
+        }
+        result = _analyze_workflow(workflow, object_info=None)
+        names = [m["name"] for m in result["models"]]
+        assert "dreamshaper_v8.safetensors" in names
+        assert "add-detail.safetensors" in names
+
+    def test_uses_display_names_from_object_info(self):
+        workflow = {
+            "1": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": "model.safetensors"},
+            },
+        }
+        object_info = {
+            "CheckpointLoaderSimple": {
+                "display_name": "Load Checkpoint",
+            },
+        }
+        result = _analyze_workflow(workflow, object_info=object_info)
+        assert result["flow"][0]["display_name"] == "Load Checkpoint"
+
+    def test_handles_empty_workflow(self):
+        result = _analyze_workflow({}, object_info=None)
+        assert result["node_count"] == 0
+        assert result["flow"] == []
+        assert result["models"] == []
+
+    def test_detects_pipeline_type_txt2img(self):
+        workflow = {
+            "1": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"width": 512, "height": 512},
+            },
+            "2": {"class_type": "KSampler", "inputs": {"latent_image": ["1", 0]}},
+            "3": {"class_type": "SaveImage", "inputs": {"images": ["2", 0]}},
+        }
+        result = _analyze_workflow(workflow, object_info=None)
+        assert result["pipeline"] == "txt2img"
+
+    def test_detects_pipeline_type_img2img(self):
+        workflow = {
+            "1": {"class_type": "LoadImage", "inputs": {"image": "input.png"}},
+            "2": {"class_type": "KSampler", "inputs": {"latent_image": ["1", 0]}},
+            "3": {"class_type": "SaveImage", "inputs": {"images": ["2", 0]}},
+        }
+        result = _analyze_workflow(workflow, object_info=None)
+        assert result["pipeline"] == "img2img"
