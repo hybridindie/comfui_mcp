@@ -42,6 +42,30 @@ class PathSanitizer:
 
         return normalized
 
+    def validate_path_segment(self, segment: str, label: str = "segment") -> str:
+        """Validate a single URL path segment (e.g. model folder name).
+
+        Blocks traversal, null bytes, slashes, and control characters.
+        """
+        decoded = unquote(segment)
+
+        if not decoded:
+            raise PathValidationError(f"{label} must not be empty")
+
+        if "\x00" in decoded:
+            raise PathValidationError(f"{label} contains null byte: {segment!r}")
+
+        if "/" in decoded or "\\" in decoded:
+            raise PathValidationError(f"{label} contains path separator: {segment!r}")
+
+        if ".." in decoded:
+            raise PathValidationError(f"{label} contains path traversal: {segment!r}")
+
+        if any(c in decoded for c in ["\n", "\r"]):
+            raise PathValidationError(f"{label} contains invalid characters: {segment!r}")
+
+        return decoded
+
     def validate_subfolder(self, subfolder: str) -> str:
         """Validate and sanitize a subfolder path."""
         if not subfolder:
@@ -53,9 +77,6 @@ class PathSanitizer:
             raise PathValidationError(f"Subfolder contains null byte: {subfolder!r}")
 
         normalized = decoded.replace("\\", "/").strip("/")
-
-        if normalized.startswith("/"):
-            raise PathValidationError(f"Subfolder is an absolute path: {subfolder!r}")
 
         parts = PurePosixPath(normalized).parts
         if ".." in parts:

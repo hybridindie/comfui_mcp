@@ -10,6 +10,7 @@ from comfyui_mcp.audit import AuditLogger
 from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.security.node_auditor import NodeAuditor
 from comfyui_mcp.security.rate_limit import RateLimiter
+from comfyui_mcp.security.sanitizer import PathSanitizer
 
 
 def register_discovery_tools(
@@ -17,6 +18,7 @@ def register_discovery_tools(
     client: ComfyUIClient,
     audit: AuditLogger,
     limiter: RateLimiter,
+    sanitizer: PathSanitizer,
     node_auditor: NodeAuditor | None = None,
 ) -> dict[str, Any]:
     """Register discovery tools and return a dict of callable functions for testing."""
@@ -26,6 +28,7 @@ def register_discovery_tools(
     async def list_models(folder: str = "checkpoints") -> list[str]:
         """List available models in a folder (checkpoints, loras, vae, etc.)."""
         limiter.check("list_models")
+        sanitizer.validate_path_segment(folder, label="folder")
         audit.log(tool="list_models", action="called", extra={"folder": folder})
         return await client.get_models(folder)
 
@@ -95,6 +98,8 @@ def register_discovery_tools(
             filename: Name of the model file
         """
         limiter.check("get_model_metadata")
+        sanitizer.validate_path_segment(folder, label="folder")
+        sanitizer.validate_path_segment(filename, label="filename")
         audit.log(
             tool="get_model_metadata",
             action="called",

@@ -73,7 +73,7 @@ def _register_all_tools(
     node_auditor: NodeAuditor,
 ) -> None:
     """Register all MCP tool groups with their dependencies."""
-    register_discovery_tools(server, client, audit, rate_limiters["read"], node_auditor)
+    register_discovery_tools(server, client, audit, rate_limiters["read"], sanitizer, node_auditor)
     register_history_tools(server, client, audit, rate_limiters["read"])
     register_job_tools(server, client, audit, rate_limiters["workflow"])
     register_file_tools(server, client, audit, rate_limiters["file"], sanitizer)

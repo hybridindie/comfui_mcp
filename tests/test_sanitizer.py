@@ -97,3 +97,40 @@ class TestSubfolderValidation:
     def test_control_characters_blocked(self, sanitizer):
         with pytest.raises(PathValidationError, match="invalid"):
             sanitizer.validate_subfolder("inputs\nmalicious")
+
+
+class TestPathSegmentValidation:
+    @pytest.fixture
+    def sanitizer(self):
+        return PathSanitizer(allowed_extensions=[".png", ".jpg"])
+
+    def test_valid_segment(self, sanitizer):
+        assert sanitizer.validate_path_segment("checkpoints", "folder") == "checkpoints"
+
+    def test_empty_segment_blocked(self, sanitizer):
+        with pytest.raises(PathValidationError, match="must not be empty"):
+            sanitizer.validate_path_segment("", "folder")
+
+    def test_traversal_blocked(self, sanitizer):
+        with pytest.raises(PathValidationError, match="path traversal"):
+            sanitizer.validate_path_segment("..", "folder")
+
+    def test_slash_blocked(self, sanitizer):
+        with pytest.raises(PathValidationError, match="path separator"):
+            sanitizer.validate_path_segment("a/b", "folder")
+
+    def test_backslash_blocked(self, sanitizer):
+        with pytest.raises(PathValidationError, match="path separator"):
+            sanitizer.validate_path_segment("a\\b", "folder")
+
+    def test_null_byte_blocked(self, sanitizer):
+        with pytest.raises(PathValidationError, match="null byte"):
+            sanitizer.validate_path_segment("check\x00points", "folder")
+
+    def test_encoded_traversal_blocked(self, sanitizer):
+        with pytest.raises(PathValidationError, match="path traversal"):
+            sanitizer.validate_path_segment("%2e%2e", "folder")
+
+    def test_newline_blocked(self, sanitizer):
+        with pytest.raises(PathValidationError, match="invalid characters"):
+            sanitizer.validate_path_segment("check\npoints", "folder")

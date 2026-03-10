@@ -9,7 +9,10 @@ from comfyui_mcp.audit import AuditLogger
 from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.security.node_auditor import NodeAuditor
 from comfyui_mcp.security.rate_limit import RateLimiter
+from comfyui_mcp.security.sanitizer import PathSanitizer, PathValidationError
 from comfyui_mcp.tools.discovery import register_discovery_tools
+
+_ALLOWED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".safetensors"]
 
 
 @pytest.fixture
@@ -17,7 +20,8 @@ def components(tmp_path):
     client = ComfyUIClient(base_url="http://test:8188")
     audit = AuditLogger(audit_file=tmp_path / "audit.log")
     limiter = RateLimiter(max_per_minute=60)
-    return client, audit, limiter
+    sanitizer = PathSanitizer(allowed_extensions=_ALLOWED_EXTENSIONS)
+    return client, audit, limiter, sanitizer
 
 
 @pytest.fixture
@@ -25,19 +29,20 @@ def components_with_auditor(tmp_path):
     client = ComfyUIClient(base_url="http://test:8188")
     audit = AuditLogger(audit_file=tmp_path / "audit.log")
     limiter = RateLimiter(max_per_minute=60)
+    sanitizer = PathSanitizer(allowed_extensions=_ALLOWED_EXTENSIONS)
     auditor = NodeAuditor()
-    return client, audit, limiter, auditor
+    return client, audit, limiter, sanitizer, auditor
 
 
 class TestListModels:
     @respx.mock
     async def test_list_models_returns_models(self, components):
-        client, audit, limiter = components
+        client, audit, limiter, sanitizer = components
         respx.get("http://test:8188/models/checkpoints").mock(
             return_value=httpx.Response(200, json=["v1.safetensors", "v2.safetensors"])
         )
         mcp = FastMCP("test")
-        tools = register_discovery_tools(mcp, client, audit, limiter)
+        tools = register_discovery_tools(mcp, client, audit, limiter, sanitizer)
 
         result = await tools["list_models"](folder="checkpoints")
         assert "v1.safetensors" in result
@@ -46,12 +51,12 @@ class TestListModels:
 class TestListNodes:
     @respx.mock
     async def test_list_nodes_returns_node_types(self, components):
-        client, audit, limiter = components
+        client, audit, limiter, sanitizer = components
         respx.get("http://test:8188/object_info").mock(
             return_value=httpx.Response(200, json={"KSampler": {}, "CLIPTextEncode": {}})
         )
         mcp = FastMCP("test")
-        tools = register_discovery_tools(mcp, client, audit, limiter)
+        tools = register_discovery_tools(mcp, client, audit, limiter, sanitizer)
 
         result = await tools["list_nodes"]()
         assert "KSampler" in result
@@ -61,12 +66,12 @@ class TestListNodes:
 class TestListExtensions:
     @respx.mock
     async def test_list_extensions(self, components):
-        client, audit, limiter = components
+        client, audit, limiter, sanitizer = components
         respx.get("http://test:8188/extensions").mock(
             return_value=httpx.Response(200, json=["ext1", "ext2"])
         )
         mcp = FastMCP("test")
-        tools = register_discovery_tools(mcp, client, audit, limiter)
+        tools = register_discovery_tools(mcp, client, audit, limiter, sanitizer)
 
         result = await tools["list_extensions"]()
         assert len(result) == 2
@@ -75,12 +80,12 @@ class TestListExtensions:
 class TestGetServerFeatures:
     @respx.mock
     async def test_get_server_features(self, components):
-        client, audit, limiter = components
+        client, audit, limiter, sanitizer = components
         respx.get("http://test:8188/features").mock(
             return_value=httpx.Response(200, json={"supports_preview_metadata": True})
         )
         mcp = FastMCP("test")
-        tools = register_discovery_tools(mcp, client, audit, limiter)
+        tools = register_discovery_tools(mcp, client, audit, limiter, sanitizer)
 
         result = await tools["get_server_features"]()
         assert result["supports_preview_metadata"] is True
@@ -89,12 +94,12 @@ class TestGetServerFeatures:
 class TestListModelFolders:
     @respx.mock
     async def test_list_model_folders(self, components):
-        client, audit, limiter = components
+        client, audit, limiter, sanitizer = components
         respx.get("http://test:8188/models").mock(
             return_value=httpx.Response(200, json=["checkpoints", "loras", "vae"])
         )
         mcp = FastMCP("test")
-        tools = register_discovery_tools(mcp, client, audit, limiter)
+        tools = register_discovery_tools(mcp, client, audit, limiter, sanitizer)
 
         result = await tools["list_model_folders"]()
         assert "checkpoints" in result
@@ -104,21 +109,55 @@ class TestListModelFolders:
 class TestGetModelMetadata:
     @respx.mock
     async def test_get_model_metadata(self, components):
-        client, audit, limiter = components
+        client, audit, limiter, sanitizer = components
         respx.get("http://test:8188/view_metadata/checkpoints").mock(
             return_value=httpx.Response(200, json={"filename": "model.safetensors", "size": 123456})
         )
         mcp = FastMCP("test")
-        tools = register_discovery_tools(mcp, client, audit, limiter)
+        tools = register_discovery_tools(mcp, client, audit, limiter, sanitizer)
 
         result = await tools["get_model_metadata"]("checkpoints", "model.safetensors")
         assert result["filename"] == "model.safetensors"
+
+    async def test_get_model_metadata_traversal_in_folder_blocked(self, components):
+        client, audit, limiter, sanitizer = components
+        mcp = FastMCP("test")
+        tools = register_discovery_tools(mcp, client, audit, limiter, sanitizer)
+
+        with pytest.raises(PathValidationError):
+            await tools["get_model_metadata"]("../etc", "model.safetensors")
+
+    async def test_get_model_metadata_traversal_in_filename_blocked(self, components):
+        client, audit, limiter, sanitizer = components
+        mcp = FastMCP("test")
+        tools = register_discovery_tools(mcp, client, audit, limiter, sanitizer)
+
+        with pytest.raises(PathValidationError, match="path separator"):
+            await tools["get_model_metadata"]("checkpoints", "../../etc/passwd")
+
+
+class TestListModelsValidation:
+    async def test_list_models_traversal_blocked(self, components):
+        client, audit, limiter, sanitizer = components
+        mcp = FastMCP("test")
+        tools = register_discovery_tools(mcp, client, audit, limiter, sanitizer)
+
+        with pytest.raises(PathValidationError):
+            await tools["list_models"](folder="../secrets")
+
+    async def test_list_models_slash_blocked(self, components):
+        client, audit, limiter, sanitizer = components
+        mcp = FastMCP("test")
+        tools = register_discovery_tools(mcp, client, audit, limiter, sanitizer)
+
+        with pytest.raises(PathValidationError, match="path separator"):
+            await tools["list_models"](folder="checkpoints/../../etc")
 
 
 class TestAuditDangerousNodes:
     @respx.mock
     async def test_audit_dangerous_nodes(self, components_with_auditor):
-        client, audit, limiter, auditor = components_with_auditor
+        client, audit, limiter, sanitizer, auditor = components_with_auditor
         respx.get("http://test:8188/object_info").mock(
             return_value=httpx.Response(
                 200,
@@ -131,7 +170,7 @@ class TestAuditDangerousNodes:
             )
         )
         mcp = FastMCP("test")
-        tools = register_discovery_tools(mcp, client, audit, limiter, auditor)
+        tools = register_discovery_tools(mcp, client, audit, limiter, sanitizer, auditor)
 
         result = await tools["audit_dangerous_nodes"]()
 
@@ -141,7 +180,7 @@ class TestAuditDangerousNodes:
 
     @respx.mock
     async def test_audit_dangerous_nodes_without_auditor(self, components):
-        client, audit, limiter = components
+        client, audit, limiter, sanitizer = components
         respx.get("http://test:8188/object_info").mock(
             return_value=httpx.Response(
                 200,
@@ -152,7 +191,7 @@ class TestAuditDangerousNodes:
             )
         )
         mcp = FastMCP("test")
-        tools = register_discovery_tools(mcp, client, audit, limiter)
+        tools = register_discovery_tools(mcp, client, audit, limiter, sanitizer)
 
         result = await tools["audit_dangerous_nodes"]()
 
