@@ -179,8 +179,16 @@ async def validate_workflow(
             continue
         if "class_type" not in node_data:
             errors.append(f"Node '{node_id}': missing 'class_type'")
-        inputs = node_data.get("inputs", {})
+        inputs = node_data.get("inputs")
+        if inputs is None:
+            errors.append(f"Node '{node_id}': missing 'inputs'")
+            node_data["inputs"] = {}
+            continue
         if not isinstance(inputs, dict):
+            errors.append(
+                f"Node '{node_id}': 'inputs' must be an object, got {type(inputs).__name__}"
+            )
+            node_data["inputs"] = {}
             continue
         for input_name, value in inputs.items():
             if isinstance(value, list) and len(value) == 2 and isinstance(value[0], str):
@@ -238,7 +246,8 @@ async def validate_workflow(
             ct = node_data.get("class_type", "")
             if ct in MODEL_LOADERS:
                 input_key, model_type = MODEL_LOADERS[ct]
-                model_name = node_data.get("inputs", {}).get(input_key, "")
+                inputs = node_data.get("inputs")
+                model_name = inputs.get(input_key, "") if isinstance(inputs, dict) else ""
                 if model_name:
                     folder_map = {
                         "checkpoint": "checkpoints",
@@ -265,6 +274,8 @@ async def validate_workflow(
         warnings.extend(result.warnings)
     except WorkflowBlockedError as e:
         errors.append(f"Security: workflow blocked — {e}")
+    except Exception as e:
+        errors.append(f"Security inspection failed due to an internal error: {e}")
 
     # --- Analysis ---
     analysis = analyze_workflow(workflow, object_info)

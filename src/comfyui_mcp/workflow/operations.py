@@ -32,6 +32,8 @@ def _apply_add_node(workflow: dict[str, Any], op: dict[str, Any]) -> None:
 def _apply_remove_node(workflow: dict[str, Any], op: dict[str, Any]) -> None:
     """Remove a node and clean up dangling references."""
     node_id = op.get("node_id")
+    if not node_id:
+        raise ValueError("remove_node requires 'node_id'")
     if node_id not in workflow:
         raise ValueError(f"Node '{node_id}' not found")
     del workflow[node_id]
@@ -53,32 +55,49 @@ def _apply_remove_node(workflow: dict[str, Any], op: dict[str, Any]) -> None:
 def _apply_set_input(workflow: dict[str, Any], op: dict[str, Any]) -> None:
     """Set an input value on a node."""
     node_id = op.get("node_id")
+    if not node_id:
+        raise ValueError("set_input requires 'node_id'")
     if node_id not in workflow:
         raise ValueError(f"Node '{node_id}' not found")
     input_name = op.get("input_name")
-    value = op.get("value")
-    workflow[node_id]["inputs"][input_name] = value
+    if not input_name:
+        raise ValueError("set_input requires 'input_name'")
+    if "value" not in op:
+        raise ValueError("set_input requires 'value'")
+    workflow[node_id]["inputs"][input_name] = op["value"]
 
 
 def _apply_connect(workflow: dict[str, Any], op: dict[str, Any]) -> None:
     """Connect one node's output to another node's input."""
     from_node = op.get("from_node")
+    if not from_node:
+        raise ValueError("connect requires 'from_node'")
     to_node = op.get("to_node")
+    if not to_node:
+        raise ValueError("connect requires 'to_node'")
     if from_node not in workflow:
         raise ValueError(f"Source node '{from_node}' not found")
     if to_node not in workflow:
         raise ValueError(f"Target node '{to_node}' not found")
     from_output = op.get("from_output", 0)
+    if not isinstance(from_output, int) or from_output < 0:
+        raise ValueError("connect requires 'from_output' to be a non-negative integer")
     to_input = op.get("to_input")
+    if not to_input:
+        raise ValueError("connect requires non-empty 'to_input'")
     workflow[to_node]["inputs"][to_input] = [from_node, from_output]
 
 
 def _apply_disconnect(workflow: dict[str, Any], op: dict[str, Any]) -> None:
     """Clear a connection on a node's input."""
     node_id = op.get("node_id")
+    if not node_id:
+        raise ValueError("disconnect requires 'node_id'")
     if node_id not in workflow:
         raise ValueError(f"Node '{node_id}' not found")
     input_name = op.get("input_name")
+    if not input_name:
+        raise ValueError("disconnect requires 'input_name'")
     inputs = workflow[node_id]["inputs"]
     if input_name not in inputs:
         raise ValueError(f"Node '{node_id}' has no input '{input_name}'")

@@ -57,7 +57,7 @@ Validates a workflow across three layers. Returns structured results.
 #### Validation Layers
 
 1. **Structural (local):** Every node has `class_type` and `inputs`. All connection references point to existing nodes. No graph cycles.
-2. **Server (best-effort):** Node class_types are installed (via `get_object_info()`). Referenced models exist (via `get_models()`). Input names are valid for their node type. If server is unreachable, skipped with a warning.
+2. **Server (best-effort):** Node `class_type`s are installed (via `get_object_info()`) and referenced models exist (via `get_models()`). If server is unreachable, this layer is skipped with a warning.
 3. **Security (reuses WorkflowInspector):** Dangerous node detection, suspicious input patterns, enforce mode blocking.
 
 ## Module Structure

@@ -44,6 +44,9 @@ def register_workflow_tools(
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON params: {e}") from e
 
+        if not isinstance(param_dict, dict):
+            raise ValueError('params must be a JSON object (e.g. {"key": "value"})')
+
         wf = create_from_template(template, param_dict)
         audit.log(
             tool="create_workflow",
@@ -74,10 +77,17 @@ def register_workflow_tools(
             wf = json.loads(workflow)
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON workflow: {e}") from e
+
+        if not isinstance(wf, dict):
+            raise ValueError("Workflow must be a JSON object keyed by node IDs")
+
         try:
             ops = json.loads(operations)
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON operations: {e}") from e
+
+        if not isinstance(ops, list):
+            raise ValueError("Operations must be a JSON array of operation objects")
 
         result = apply_operations(wf, ops)
         audit.log(
