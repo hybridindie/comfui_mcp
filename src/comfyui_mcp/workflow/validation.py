@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import graphlib
 from typing import Any, TypedDict
+
+import httpx
+
+from comfyui_mcp.client import ComfyUIClient
+from comfyui_mcp.security.inspector import WorkflowBlockedError, WorkflowInspector
 
 # Node class_types that load models, mapped to their model input key and type label
 MODEL_LOADERS: dict[str, tuple[str, str]] = {
@@ -150,4 +156,123 @@ def analyze_workflow(
         "pipeline": pipeline,
         "prompt_nodes": prompt_nodes,
         "negative_nodes": negative_nodes,
+    }
+
+
+async def validate_workflow(
+    workflow: dict[str, Any],
+    client: ComfyUIClient,
+    inspector: WorkflowInspector,
+) -> dict[str, Any]:
+    """Validate a workflow: structural checks, server checks, security inspection.
+
+    Returns dict with: valid (bool), errors (list), warnings (list),
+    node_count (int), pipeline (str).
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    # --- Structural checks ---
+    for node_id, node_data in workflow.items():
+        if not isinstance(node_data, dict):
+            errors.append(f"Node '{node_id}': not a valid node object")
+            continue
+        if "class_type" not in node_data:
+            errors.append(f"Node '{node_id}': missing 'class_type'")
+        inputs = node_data.get("inputs", {})
+        if not isinstance(inputs, dict):
+            continue
+        for input_name, value in inputs.items():
+            if isinstance(value, list) and len(value) == 2 and isinstance(value[0], str):
+                ref_id = value[0]
+                if ref_id not in workflow:
+                    errors.append(
+                        f"Node '{node_id}' input '{input_name}':"
+                        f" references non-existent node '{ref_id}'"
+                    )
+
+    # Cycle detection
+    deps: dict[str, set[str]] = {}
+    for node_id, node_data in workflow.items():
+        if not isinstance(node_data, dict):
+            continue
+        deps.setdefault(node_id, set())
+        inputs = node_data.get("inputs", {})
+        if not isinstance(inputs, dict):
+            continue
+        for value in inputs.values():
+            if (
+                isinstance(value, list)
+                and len(value) == 2
+                and isinstance(value[0], str)
+                and value[0] in workflow
+            ):
+                deps[node_id].add(value[0])
+                deps.setdefault(value[0], set())
+
+    sorter = graphlib.TopologicalSorter(deps)
+    try:
+        list(sorter.static_order())
+    except graphlib.CycleError as e:
+        errors.append(f"Workflow contains a cycle: {e}")
+
+    # --- Server checks (best-effort) ---
+    object_info: dict[str, Any] | None = None
+    with contextlib.suppress(httpx.HTTPError, OSError):
+        object_info = await client.get_object_info()
+
+    if object_info is None:
+        warnings.append("ComfyUI server unreachable — server validation skipped")
+    else:
+        for node_id, node_data in workflow.items():
+            if not isinstance(node_data, dict):
+                continue
+            ct = node_data.get("class_type", "")
+            if ct and ct not in object_info:
+                errors.append(f"Node '{node_id}': class_type '{ct}' not installed on server")
+
+        # Check models exist
+        for node_id, node_data in workflow.items():
+            if not isinstance(node_data, dict):
+                continue
+            ct = node_data.get("class_type", "")
+            if ct in MODEL_LOADERS:
+                input_key, model_type = MODEL_LOADERS[ct]
+                model_name = node_data.get("inputs", {}).get(input_key, "")
+                if model_name:
+                    folder_map = {
+                        "checkpoint": "checkpoints",
+                        "lora": "loras",
+                        "vae": "vae",
+                        "upscale": "upscale_models",
+                        "controlnet": "controlnet",
+                        "clip": "clip",
+                        "unet": "unet",
+                    }
+                    folder = folder_map.get(model_type, model_type)
+                    available: list[str] = []
+                    with contextlib.suppress(httpx.HTTPError, OSError):
+                        available = await client.get_models(folder)
+                    if available and model_name not in available:
+                        warnings.append(
+                            f"Node '{node_id}': {model_type} model"
+                            f" '{model_name}' not found in '{folder}'"
+                        )
+
+    # --- Security inspection ---
+    try:
+        result = inspector.inspect(workflow)
+        warnings.extend(result.warnings)
+    except WorkflowBlockedError as e:
+        errors.append(f"Security: workflow blocked — {e}")
+
+    # --- Analysis ---
+    analysis = analyze_workflow(workflow, object_info)
+
+    return {
+        "valid": len(errors) == 0,
+        "errors": errors,
+        "warnings": warnings,
+        "node_count": analysis["node_count"],
+        "pipeline": analysis["pipeline"],
     }
