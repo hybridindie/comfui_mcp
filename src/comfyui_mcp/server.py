@@ -18,6 +18,7 @@ from comfyui_mcp.tools.files import register_file_tools
 from comfyui_mcp.tools.generation import register_generation_tools
 from comfyui_mcp.tools.history import register_history_tools
 from comfyui_mcp.tools.jobs import register_job_tools
+from comfyui_mcp.tools.workflow import register_workflow_tools
 
 
 def _create_client(settings: Settings) -> ComfyUIClient:
@@ -85,6 +86,7 @@ def _register_all_tools(
         inspector,
         read_limiter=rate_limiters["read"],
     )
+    register_workflow_tools(server, client, audit, rate_limiters["read"], inspector)
 
 
 def _build_server(settings: Settings | None = None) -> tuple[FastMCP, Settings]:
