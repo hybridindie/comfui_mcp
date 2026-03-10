@@ -164,3 +164,92 @@ class TestExtractPngMetadata:
     def test_returns_empty_for_truncated_png(self):
         result = _extract_png_metadata(b"\x89PNG\r\n\x1a\n\x00")
         assert result == {}
+
+
+class TestGetWorkflowFromImage:
+    @respx.mock
+    async def test_extracts_workflow_and_prompt(self, components):
+        client, audit, limiter, sanitizer = components
+        workflow_json = json.dumps({"1": {"class_type": "KSampler", "inputs": {}}})
+        prompt_json = json.dumps({"1": {"class_type": "KSampler", "inputs": {}}})
+        png_data = _build_png_with_text_chunks({"workflow": workflow_json, "prompt": prompt_json})
+        respx.get("http://test:8188/view").mock(
+            return_value=httpx.Response(
+                200, content=png_data, headers={"content-type": "image/png"}
+            )
+        )
+        mcp_server = FastMCP("test")
+        tools = register_file_tools(mcp_server, client, audit, limiter, sanitizer)
+        result = await tools["get_workflow_from_image"](filename="test.png")
+        assert result["workflow"] == {"1": {"class_type": "KSampler", "inputs": {}}}
+        assert result["prompt"] == {"1": {"class_type": "KSampler", "inputs": {}}}
+        assert "workflow" in result["message"].lower()
+        assert "prompt" in result["message"].lower()
+
+    @respx.mock
+    async def test_extracts_ztxt_workflow(self, components):
+        client, audit, limiter, sanitizer = components
+        workflow_json = json.dumps({"1": {"class_type": "SaveImage", "inputs": {}}})
+        png_data = _build_png_with_ztxt_chunks({"workflow": workflow_json})
+        respx.get("http://test:8188/view").mock(
+            return_value=httpx.Response(
+                200, content=png_data, headers={"content-type": "image/png"}
+            )
+        )
+        mcp_server = FastMCP("test")
+        tools = register_file_tools(mcp_server, client, audit, limiter, sanitizer)
+        result = await tools["get_workflow_from_image"](filename="test.png")
+        assert result["workflow"] == {"1": {"class_type": "SaveImage", "inputs": {}}}
+
+    @respx.mock
+    async def test_returns_none_when_no_metadata(self, components):
+        client, audit, limiter, sanitizer = components
+        png_data = _build_png_with_text_chunks({})
+        respx.get("http://test:8188/view").mock(
+            return_value=httpx.Response(
+                200, content=png_data, headers={"content-type": "image/png"}
+            )
+        )
+        mcp_server = FastMCP("test")
+        tools = register_file_tools(mcp_server, client, audit, limiter, sanitizer)
+        result = await tools["get_workflow_from_image"](filename="test.png")
+        assert result["workflow"] is None
+        assert result["prompt"] is None
+        assert "no workflow metadata" in result["message"].lower()
+
+    @respx.mock
+    async def test_rejects_non_png(self, components):
+        client, audit, limiter, sanitizer = components
+        respx.get("http://test:8188/view").mock(
+            return_value=httpx.Response(
+                200, content=b"\xff\xd8\xff\xe0JFIF", headers={"content-type": "image/jpeg"}
+            )
+        )
+        mcp_server = FastMCP("test")
+        tools = register_file_tools(mcp_server, client, audit, limiter, sanitizer)
+        with pytest.raises(ValueError, match="not a PNG"):
+            await tools["get_workflow_from_image"](filename="photo.png")
+
+    async def test_path_traversal_blocked(self, components):
+        client, audit, limiter, sanitizer = components
+        mcp_server = FastMCP("test")
+        tools = register_file_tools(mcp_server, client, audit, limiter, sanitizer)
+        with pytest.raises(PathValidationError):
+            await tools["get_workflow_from_image"](filename="../../../etc/passwd.png")
+
+    @respx.mock
+    async def test_handles_malformed_json_in_chunk(self, components):
+        client, audit, limiter, sanitizer = components
+        png_data = _build_png_with_text_chunks({"workflow": "not valid json{{"})
+        respx.get("http://test:8188/view").mock(
+            return_value=httpx.Response(
+                200, content=png_data, headers={"content-type": "image/png"}
+            )
+        )
+        mcp_server = FastMCP("test")
+        tools = register_file_tools(mcp_server, client, audit, limiter, sanitizer)
+        result = await tools["get_workflow_from_image"](filename="test.png")
+        assert result["workflow"] is None
+        assert (
+            "malformed" in result["message"].lower() or "no workflow" in result["message"].lower()
+        )

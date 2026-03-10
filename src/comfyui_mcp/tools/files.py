@@ -1,8 +1,9 @@
-"""File operation tools: upload_image, get_image, list_outputs."""
+"""File operation tools: upload_image, get_image, list_outputs, get_workflow_from_image."""
 
 from __future__ import annotations
 
 import base64
+import json
 import struct
 import zlib
 from typing import Any
@@ -166,5 +167,75 @@ def register_file_tools(
         return f"Uploaded mask {result.get('name', clean_name)} to ComfyUI input directory"
 
     tool_fns["upload_mask"] = upload_mask
+
+    @mcp.tool()
+    async def get_workflow_from_image(filename: str, subfolder: str = "output") -> dict:
+        """Extract embedded workflow and prompt metadata from a ComfyUI-generated PNG.
+
+        ComfyUI embeds the full workflow JSON and prompt data in PNG text chunks.
+        This enables extracting the exact settings used to generate an image
+        for inspection or re-execution.
+
+        Args:
+            filename: Name of the PNG file to extract metadata from
+            subfolder: Directory to look in (default: 'output')
+
+        Returns:
+            Dict with 'workflow' (parsed JSON or None), 'prompt' (parsed JSON or None),
+            and 'message' (human-readable status).
+        """
+        limiter.check("get_workflow_from_image")
+        clean_name = sanitizer.validate_filename(filename)
+        clean_subfolder = sanitizer.validate_subfolder(subfolder)
+        audit.log(
+            tool="get_workflow_from_image",
+            action="extracting",
+            extra={"filename": clean_name, "subfolder": clean_subfolder},
+        )
+
+        data, _ = await client.get_image(clean_name, clean_subfolder)
+
+        if len(data) < 8 or data[:8] != _PNG_SIGNATURE:
+            raise ValueError("File is not a PNG image")
+
+        raw_metadata = _extract_png_metadata(data)
+
+        workflow = None
+        prompt = None
+        parts: list[str] = []
+
+        if "workflow" in raw_metadata:
+            try:
+                workflow = json.loads(raw_metadata["workflow"])
+                node_count = len(workflow) if isinstance(workflow, dict) else 0
+                parts.append(f"workflow ({node_count} nodes)")
+            except (json.JSONDecodeError, TypeError):
+                parts.append("workflow (malformed JSON)")
+
+        if "prompt" in raw_metadata:
+            try:
+                prompt = json.loads(raw_metadata["prompt"])
+                parts.append("prompt")
+            except (json.JSONDecodeError, TypeError):
+                parts.append("prompt (malformed JSON)")
+
+        if parts:
+            message = f"Extracted {' and '.join(parts)} from image"
+        else:
+            message = "No workflow metadata found in this image"
+
+        audit.log(
+            tool="get_workflow_from_image",
+            action="extracted",
+            extra={
+                "filename": clean_name,
+                "has_workflow": workflow is not None,
+                "has_prompt": prompt is not None,
+            },
+        )
+
+        return {"workflow": workflow, "prompt": prompt, "message": message}
+
+    tool_fns["get_workflow_from_image"] = get_workflow_from_image
 
     return tool_fns
