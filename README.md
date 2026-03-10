@@ -123,6 +123,9 @@ docker run --rm ghcr.io/hybridindie/comfyui-mcp:latest --help
 | `generate_image` | Text-to-image using a built-in workflow. Params: prompt, negative_prompt, width, height, steps, cfg, model. |
 | `run_workflow` | Submit arbitrary ComfyUI workflow JSON. Inspected for dangerous nodes before execution. |
 | `summarize_workflow` | Summarize a workflow's structure, data flow, models, and parameters. |
+| `create_workflow` | Create a workflow from a template (txt2img, img2img, upscale, inpaint, txt2vid_animatediff, txt2vid_wan) with parameter overrides. |
+| `modify_workflow` | Apply batch operations (add_node, remove_node, set_input, connect, disconnect) to a workflow. |
+| `validate_workflow` | Validate workflow structure, server compatibility, and security. |
 
 ### Job Management
 
