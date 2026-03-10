@@ -157,6 +157,31 @@ class TestExtractPngMetadata:
         result = _extract_png_metadata(png_data)
         assert result == {}
 
+    def test_skips_ztxt_with_invalid_compression_method(self):
+        """zTXt chunks with compression method != 0 should be ignored."""
+        png_signature = b"\x89PNG\r\n\x1a\n"
+        ihdr_data = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+        ihdr = _build_chunk(b"IHDR", ihdr_data)
+        # Build a zTXt chunk with compression method = 1 (invalid)
+        key = b"workflow"
+        compressed = zlib.compress(b'{"test": true}')
+        chunk_data = key + b"\x00" + b"\x01" + compressed  # method=1
+        ztxt = _build_chunk(b"zTXt", chunk_data)
+        idat = _build_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+        iend = _build_chunk(b"IEND", b"")
+        png_data = png_signature + ihdr + ztxt + idat + iend
+        result = _extract_png_metadata(png_data)
+        assert "workflow" not in result
+
+    def test_limits_decompressed_ztxt_size(self):
+        """zTXt decompression should respect max_text_bytes limit."""
+        # Create a zTXt chunk whose decompressed data exceeds 100 bytes
+        large_value = "x" * 200
+        png_data = _build_png_with_ztxt_chunks({"big_key": large_value})
+        result = _extract_png_metadata(png_data, max_text_bytes=100)
+        # The chunk should be silently skipped (decompression exceeds limit)
+        assert "big_key" not in result
+
     def test_returns_empty_for_non_png(self):
         result = _extract_png_metadata(b"not a png file at all")
         assert result == {}
@@ -229,6 +254,25 @@ class TestGetWorkflowFromImage:
         tools = register_file_tools(mcp_server, client, audit, limiter, sanitizer)
         with pytest.raises(ValueError, match="not a PNG"):
             await tools["get_workflow_from_image"](filename="photo.png")
+
+    @respx.mock
+    async def test_rejects_oversized_download(self, components):
+        client, audit, limiter, _sanitizer = components
+        # Create a sanitizer with a tiny max size to trigger the guard
+        small_sanitizer = PathSanitizer(
+            allowed_extensions=[".png", ".jpg", ".jpeg", ".webp", ".json"],
+            max_size_mb=0,  # 0 MB = rejects everything
+        )
+        png_data = _build_png_with_text_chunks({"workflow": '{"1": {}}'})
+        respx.get("http://test:8188/view").mock(
+            return_value=httpx.Response(
+                200, content=png_data, headers={"content-type": "image/png"}
+            )
+        )
+        mcp_server = FastMCP("test")
+        tools = register_file_tools(mcp_server, client, audit, limiter, small_sanitizer)
+        with pytest.raises(PathValidationError):
+            await tools["get_workflow_from_image"](filename="test.png")
 
     async def test_path_traversal_blocked(self, components):
         client, audit, limiter, sanitizer = components

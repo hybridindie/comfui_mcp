@@ -18,7 +18,12 @@ from comfyui_mcp.security.sanitizer import PathSanitizer
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
-def _extract_png_metadata(data: bytes) -> dict[str, str]:
+_MAX_TEXT_CHUNK_BYTES = 10 * 1024 * 1024  # 10 MB limit for decompressed text chunks
+
+
+def _extract_png_metadata(
+    data: bytes, max_text_bytes: int = _MAX_TEXT_CHUNK_BYTES
+) -> dict[str, str]:
     """Extract tEXt and zTXt metadata from PNG data.
 
     Returns a dict of key-value pairs from PNG text chunks.
@@ -52,13 +57,18 @@ def _extract_png_metadata(data: bytes) -> dict[str, str]:
             null_idx = chunk_data.find(b"\x00")
             if null_idx > 0 and null_idx + 2 <= len(chunk_data):
                 key = chunk_data[:null_idx].decode("latin-1")
-                # Skip compression method byte (always 0 = zlib)
-                compressed = chunk_data[null_idx + 2 :]
-                try:
-                    value = zlib.decompress(compressed).decode("utf-8")
-                    metadata[key] = value
-                except (zlib.error, UnicodeDecodeError):
-                    pass
+                # Compression method must be 0 (zlib) per PNG spec
+                compression_method = chunk_data[null_idx + 1]
+                if compression_method == 0:
+                    compressed = chunk_data[null_idx + 2 :]
+                    try:
+                        decompressor = zlib.decompressobj()
+                        raw = decompressor.decompress(compressed, max_text_bytes)
+                        if not decompressor.unconsumed_tail:
+                            value = raw.decode("utf-8")
+                            metadata[key] = value
+                    except (zlib.error, UnicodeDecodeError, OverflowError):
+                        pass
 
         elif chunk_type == b"IEND":
             break
@@ -194,6 +204,7 @@ def register_file_tools(
         )
 
         data, _ = await client.get_image(clean_name, clean_subfolder)
+        sanitizer.validate_size(len(data))
 
         if len(data) < 8 or data[:8] != _PNG_SIGNATURE:
             raise ValueError("File is not a PNG image")
