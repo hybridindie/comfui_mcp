@@ -6,8 +6,9 @@ import contextlib
 import copy
 import graphlib
 import json
-from typing import Any
+from typing import Any, TypedDict
 
+import httpx
 from mcp.server.fastmcp import FastMCP
 
 from comfyui_mcp.audit import AuditLogger
@@ -110,9 +111,22 @@ _INPUT_NODE_TYPES = {"LoadImage", "LoadImageMask", "EmptyLatentImage"}
 _SAMPLER_NODE_TYPES = {"KSampler", "KSamplerAdvanced", "SamplerCustom"}
 
 
+class WorkflowAnalysis(TypedDict):
+    """Structured result from _analyze_workflow."""
+
+    node_count: int
+    class_types: list[str]
+    flow: list[dict[str, Any]]
+    models: list[dict[str, str]]
+    parameters: dict[str, Any]
+    pipeline: str
+    prompt_nodes: list[str]
+    negative_nodes: list[str]
+
+
 def _analyze_workflow(
     workflow: dict[str, Any], object_info: dict[str, Any] | None
-) -> dict[str, Any]:
+) -> WorkflowAnalysis:
     """Analyze a ComfyUI workflow and return structured data."""
     if not workflow:
         return {
@@ -233,7 +247,7 @@ def _analyze_workflow(
     }
 
 
-def _format_summary(analysis: dict[str, Any]) -> str:
+def _format_summary(analysis: WorkflowAnalysis) -> str:
     """Format an analysis dict into a human-readable summary."""
     lines: list[str] = []
 
@@ -394,7 +408,7 @@ def register_generation_tools(
 
         # Best-effort API enrichment
         object_info: dict[str, Any] | None = None
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(httpx.HTTPError, OSError):
             object_info = await client.get_object_info()
 
         analysis = _analyze_workflow(wf, object_info)
