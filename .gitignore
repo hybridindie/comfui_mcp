@@ -14,3 +14,4 @@ htmlcov/
 .ruff_cache/
 .benchmarks/
 *.log
+.worktrees/
