@@ -65,6 +65,13 @@ class ComfyUIClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.close()
 
+    @staticmethod
+    def _unwrap_model_manager_response(payload: object) -> object:
+        """Normalize ComfyUI-Model-Manager success envelopes to their data payload."""
+        if isinstance(payload, dict) and payload.get("success") is True and "data" in payload:
+            return payload["data"]
+        return payload
+
     async def get_queue(self) -> dict:
         r = await self._request("get", "/queue")
         return r.json()
@@ -163,7 +170,12 @@ class ComfyUIClient:
     async def get_model_manager_folders(self) -> list[str]:
         """GET /model-manager/models — list available model folder types."""
         r = await self._request("get", "/model-manager/models")
-        return r.json()
+        payload = self._unwrap_model_manager_response(r.json())
+        if isinstance(payload, dict):
+            return list(payload.keys())
+        if isinstance(payload, list):
+            return payload
+        raise TypeError("Unexpected response payload for /model-manager/models")
 
     async def create_download_task(
         self,
@@ -185,18 +197,23 @@ class ComfyUIClient:
             "downloadPlatform": download_platform,
             "downloadUrl": download_url,
             "sizeBytes": str(size_bytes),
+            "previewFile": preview_url,
         }
-        if preview_url:
-            form_data["previewFile"] = preview_url
         if description:
             form_data["description"] = description
         r = await self._request("post", "/model-manager/model", data=form_data)
-        return r.json()
+        payload = self._unwrap_model_manager_response(r.json())
+        if isinstance(payload, dict):
+            return payload
+        raise TypeError("Unexpected response payload for /model-manager/model")
 
     async def get_download_tasks(self) -> list[dict]:
         """GET /model-manager/download/task — list download tasks with progress."""
         r = await self._request("get", "/model-manager/download/task")
-        return r.json()
+        payload = self._unwrap_model_manager_response(r.json())
+        if isinstance(payload, list):
+            return payload
+        raise TypeError("Unexpected response payload for /model-manager/download/task")
 
     async def delete_download_task(self, task_id: str) -> dict:
         """DELETE /model-manager/download/{task_id} — cancel and remove a download."""

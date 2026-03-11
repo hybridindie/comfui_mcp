@@ -211,14 +211,24 @@ class TestModelManagerClient:
     @respx.mock
     async def test_get_model_manager_folders(self, client):
         respx.get("http://test-comfyui:8188/model-manager/models").mock(
-            return_value=httpx.Response(200, json=["checkpoints", "loras", "vae"])
+            return_value=httpx.Response(
+                200,
+                json={
+                    "success": True,
+                    "data": {
+                        "checkpoints": ["/models/checkpoints"],
+                        "loras": ["/models/loras"],
+                        "vae": ["/models/vae"],
+                    },
+                },
+            )
         )
         result = await client.get_model_manager_folders()
         assert result == ["checkpoints", "loras", "vae"]
 
     @respx.mock
     async def test_create_download_task(self, client):
-        respx.post("http://test-comfyui:8188/model-manager/model").mock(
+        route = respx.post("http://test-comfyui:8188/model-manager/model").mock(
             return_value=httpx.Response(200, json={"success": True, "data": {"taskId": "task-1"}})
         )
         result = await client.create_download_task(
@@ -229,13 +239,19 @@ class TestModelManagerClient:
             download_url="https://huggingface.co/org/repo/resolve/main/model.safetensors",
             size_bytes=1000000,
         )
-        assert result["success"] is True
+        assert result["taskId"] == "task-1"
+        body = route.calls[0].request.content.decode()
+        assert "previewFile=" in body
 
     @respx.mock
     async def test_get_download_tasks(self, client):
         respx.get("http://test-comfyui:8188/model-manager/download/task").mock(
             return_value=httpx.Response(
-                200, json=[{"taskId": "t1", "status": "doing", "progress": 50}]
+                200,
+                json={
+                    "success": True,
+                    "data": [{"taskId": "t1", "status": "doing", "progress": 50}],
+                },
             )
         )
         result = await client.get_download_tasks()

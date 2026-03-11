@@ -160,7 +160,17 @@ class TestDownloadModel:
     @respx.mock
     async def test_download_valid_model(self, registered_tools):
         respx.get("http://test:8188/model-manager/models").mock(
-            return_value=httpx.Response(200, json=["checkpoints", "loras", "vae"])
+            return_value=httpx.Response(
+                200,
+                json={
+                    "success": True,
+                    "data": {
+                        "checkpoints": ["/models/checkpoints"],
+                        "loras": ["/models/loras"],
+                        "vae": ["/models/vae"],
+                    },
+                },
+            )
         )
         respx.post("http://test:8188/model-manager/model").mock(
             return_value=httpx.Response(200, json={"success": True, "data": {"taskId": "t-1"}})
@@ -171,7 +181,7 @@ class TestDownloadModel:
             filename="epicrealism.safetensors",
         )
         parsed = json.loads(result)
-        assert parsed["success"] is True
+        assert parsed["taskId"] == "t-1"
 
     @respx.mock
     async def test_download_blocked_domain(self, registered_tools):
@@ -200,7 +210,16 @@ class TestDownloadModel:
     @respx.mock
     async def test_download_invalid_folder(self, registered_tools):
         respx.get("http://test:8188/model-manager/models").mock(
-            return_value=httpx.Response(200, json=["checkpoints", "loras"])
+            return_value=httpx.Response(
+                200,
+                json={
+                    "success": True,
+                    "data": {
+                        "checkpoints": ["/models/checkpoints"],
+                        "loras": ["/models/loras"],
+                    },
+                },
+            )
         )
         with pytest.raises(ValueError, match="not a valid model folder"):
             await registered_tools["download_model"](
@@ -222,10 +241,13 @@ class TestDownloadModel:
     @respx.mock
     async def test_download_infers_platform_huggingface(self, registered_tools):
         respx.get("http://test:8188/model-manager/models").mock(
-            return_value=httpx.Response(200, json=["checkpoints"])
+            return_value=httpx.Response(
+                200,
+                json={"success": True, "data": {"checkpoints": ["/models/checkpoints"]}},
+            )
         )
         route = respx.post("http://test:8188/model-manager/model").mock(
-            return_value=httpx.Response(200, json={"success": True})
+            return_value=httpx.Response(200, json={"success": True, "data": {"taskId": "t-1"}})
         )
         await registered_tools["download_model"](
             url="https://huggingface.co/org/repo/resolve/main/model.safetensors",
@@ -240,20 +262,26 @@ class TestGetDownloadTasks:
     @respx.mock
     async def test_get_tasks(self, registered_tools):
         respx.get("http://test:8188/model-manager/models").mock(
-            return_value=httpx.Response(200, json=["checkpoints"])
+            return_value=httpx.Response(
+                200,
+                json={"success": True, "data": {"checkpoints": ["/models/checkpoints"]}},
+            )
         )
         respx.get("http://test:8188/model-manager/download/task").mock(
             return_value=httpx.Response(
                 200,
-                json=[
-                    {
-                        "taskId": "t1",
-                        "status": "doing",
-                        "progress": 75,
-                        "totalSize": 1000,
-                        "downloadedSize": 750,
-                    }
-                ],
+                json={
+                    "success": True,
+                    "data": [
+                        {
+                            "taskId": "t1",
+                            "status": "doing",
+                            "progress": 75,
+                            "totalSize": 1000,
+                            "downloadedSize": 750,
+                        }
+                    ],
+                },
             )
         )
         result = await registered_tools["get_download_tasks"]()
