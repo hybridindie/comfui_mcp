@@ -93,10 +93,11 @@ def register_job_tools(
 
     @mcp.tool()
     async def get_progress(prompt_id: str) -> str:
-        """Get the current execution progress for a workflow.
+        """Get the current execution progress for a workflow via HTTP.
 
-        Returns status (queued/running/completed/error/unknown), step progress,
-        current node, queue position, and output files when available.
+        Returns status (queued/running/completed/error/unknown), queue position,
+        and output files when available. Step progress and current node are only
+        available when using wait=True on run_workflow/generate_image (WebSocket).
 
         Args:
             prompt_id: The prompt_id returned by run_workflow or generate_image.

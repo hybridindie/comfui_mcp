@@ -130,7 +130,11 @@ def _build_server(settings: Settings | None = None) -> tuple[FastMCP, Settings]:
 
     server = FastMCP(**server_kwargs)
 
-    progress = WebSocketProgress(client, timeout=float(settings.comfyui.timeout_read))
+    progress = WebSocketProgress(
+        client,
+        timeout=float(settings.comfyui.timeout_read),
+        tls_verify=settings.comfyui.tls_verify,
+    )
     _register_all_tools(
         server,
         client,

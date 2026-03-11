@@ -56,14 +56,13 @@ Rate limited under `read` category. Audit logged.
 
 Contains:
 - `ProgressState` — dataclass for the unified progress structure
-- `WebSocketProgress` — manages on-demand WebSocket connections, event parsing, state buffering
+- `WebSocketProgress` — manages on-demand WebSocket connections, event parsing, HTTP fallback
 
 `WebSocketProgress` responsibilities:
-- `track(prompt_id, base_url)` — connect WebSocket, listen for events, update internal state
-- `get_state(prompt_id)` — return current `ProgressState` (from buffer or HTTP fallback)
-- `wait_for_completion(prompt_id, timeout)` — block until done, return final state
-- Internal `client_id` generated as UUID per connection
-- Constructor takes `client: ComfyUIClient` and `timeout: float` (passed from settings `timeout_read`)
+- `wait_for_completion(prompt_id)` — connect WebSocket, listen for events until done, return final state. Falls back to HTTP polling on WebSocket failure.
+- `get_state(prompt_id)` — return current `ProgressState` via HTTP (`/queue` + `/history`). Step/node fields omitted (HTTP-only).
+- Internal `client_id` generated as UUID per instance
+- Constructor takes `client: ComfyUIClient`, `timeout: float` (from settings `timeout_read`), and `tls_verify: bool` (matches client TLS settings)
 
 Depends on: `websockets` library, `comfyui_mcp.client.ComfyUIClient` (for HTTP fallback and base URL).
 Does not import from `tools/`.

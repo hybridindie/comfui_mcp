@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import ssl
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import websockets
@@ -50,19 +52,19 @@ class ProgressState:
 class WebSocketProgress:
     """Manages on-demand WebSocket connections for progress tracking."""
 
-    def __init__(self, client: ComfyUIClient, timeout: float = 300.0) -> None:
+    def __init__(
+        self, client: ComfyUIClient, timeout: float = 300.0, tls_verify: bool = True
+    ) -> None:
         self._client = client
         self._timeout = timeout
+        self._tls_verify = tls_verify
         self._client_id = uuid.uuid4().hex
 
     def _ws_url(self) -> str:
         """Derive WebSocket URL from client's HTTP base URL."""
-        base = self._client.base_url
-        if base.startswith("https://"):
-            ws_base = "wss://" + base[len("https://") :]
-        else:
-            ws_base = "ws://" + base[len("http://") :]
-        return f"{ws_base}/ws?clientId={self._client_id}"
+        parsed = urlparse(self._client.base_url)
+        ws_scheme = "wss" if parsed.scheme == "https" else "ws"
+        return f"{ws_scheme}://{parsed.netloc}/ws?clientId={self._client_id}"
 
     async def wait_for_completion(self, prompt_id: str) -> ProgressState:
         """Connect via WebSocket and block until the prompt completes, errors, or times out."""
@@ -70,8 +72,15 @@ class WebSocketProgress:
         start_time = time.monotonic()
 
         try:
+            ws_kwargs: dict[str, Any] = {}
+            if self._ws_url().startswith("wss://") and not self._tls_verify:
+                ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                ws_kwargs["ssl"] = ctx
+
             async with asyncio.timeout(self._timeout):
-                async with websockets.connect(self._ws_url()) as ws:
+                async with websockets.connect(self._ws_url(), **ws_kwargs) as ws:
                     async for raw_msg in ws:
                         if isinstance(raw_msg, bytes):
                             continue
