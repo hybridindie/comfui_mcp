@@ -248,6 +248,11 @@ rate_limits:                       # Requests per minute
   file_ops: 30
   read_only: 60
 
+model_search:
+  huggingface_token: ""            # Optional; needed for gated/private HF models
+  civitai_api_key: ""              # Optional; needed for auth-only CivitAI access
+  max_search_results: 10
+
 logging:
   audit_file: "~/.comfyui-mcp/audit.log"
 
@@ -274,6 +279,29 @@ Environment variables override config file values:
 | `COMFYUI_CIVITAI_API_KEY` | `model_search.civitai_api_key` |
 | `COMFYUI_MAX_SEARCH_RESULTS` | `model_search.max_search_results` |
 | `COMFYUI_ALLOWED_DOWNLOAD_DOMAINS` | `security.allowed_download_domains` |
+
+### HuggingFace and CivitAI API keys
+
+`search_models` and `download_model` work without API keys for many public models. Add keys when you need access to gated/private resources or higher provider limits.
+
+Set them in config:
+
+```yaml
+model_search:
+  huggingface_token: "hf_xxx"
+  civitai_api_key: "xxx"
+```
+
+Or via environment variables:
+
+```bash
+export COMFYUI_HUGGINGFACE_TOKEN="hf_xxx"
+export COMFYUI_CIVITAI_API_KEY="xxx"
+```
+
+Security notes:
+- Prefer environment variables in production so secrets do not live in files committed to git.
+- Audit logs redact sensitive fields (`token`, `api_key`, etc.), but avoid printing secrets in shell history when possible.
 
 ## Security modes
 

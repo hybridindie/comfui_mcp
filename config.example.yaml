@@ -1,6 +1,15 @@
 comfyui:
   url: "http://comfyui:8188"
 
+model_search:
+  # Optional: needed for gated/private HuggingFace models and higher API limits.
+  # Env override: COMFYUI_HUGGINGFACE_TOKEN
+  huggingface_token: ""
+  # Optional: needed for CivitAI resources that require authentication.
+  # Env override: COMFYUI_CIVITAI_API_KEY
+  civitai_api_key: ""
+  max_search_results: 10
+
 security:
   mode: "audit"
 

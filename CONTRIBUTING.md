@@ -21,6 +21,11 @@ uv run pytest --cov=src/comfyui_mcp --cov-report=term-missing
 
 # Run with local ComfyUI
 export COMFYUI_URL="http://127.0.0.1:8188"
+
+# Optional for model search/download against authenticated resources
+export COMFYUI_HUGGINGFACE_TOKEN="hf_xxx"
+export COMFYUI_CIVITAI_API_KEY="xxx"
+
 uv run comfyui-mcp
 ```
 
