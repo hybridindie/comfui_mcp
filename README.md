@@ -16,6 +16,10 @@ This server adds five security layers between the AI assistant and ComfyUI:
 | **Audit Logger** | Structured JSON logging of every operation with automatic redaction of sensitive fields (tokens, passwords). |
 | **Selective API Surface** | Only exposes safe ComfyUI endpoints. Dangerous endpoints (`/userdata`, `/free`, `/users`, `/system_stats`) are never proxied. |
 
+### Real-time progress tracking
+
+When `wait=True` is passed to `generate_image` or `run_workflow`, the server connects to ComfyUI's WebSocket to track execution in real time — reporting step progress, current node, and output files when complete. If the WebSocket connection fails, it automatically falls back to HTTP polling. Use `get_progress` to check status of any job at any time.
+
 ## Quick start
 
 ### Prerequisites
@@ -120,8 +124,8 @@ docker run --rm ghcr.io/hybridindie/comfyui-mcp:latest --help
 
 | Tool | Description |
 |------|-------------|
-| `generate_image` | Text-to-image using a built-in workflow. Params: prompt, negative_prompt, width, height, steps, cfg, model. |
-| `run_workflow` | Submit arbitrary ComfyUI workflow JSON. Inspected for dangerous nodes before execution. |
+| `generate_image` | Text-to-image using a built-in workflow. Params: prompt, negative_prompt, width, height, steps, cfg, model. Set `wait=True` to block until complete and return outputs. |
+| `run_workflow` | Submit arbitrary ComfyUI workflow JSON. Inspected for dangerous nodes before execution. Set `wait=True` to block until complete and return outputs. |
 | `summarize_workflow` | Summarize a workflow's structure, data flow, models, and parameters. |
 | `create_workflow` | Create a workflow from a template (txt2img, img2img, upscale, inpaint, txt2vid_animatediff, txt2vid_wan) with parameter overrides. |
 | `modify_workflow` | Apply batch operations (add_node, remove_node, set_input, connect, disconnect) to a workflow. |
@@ -137,6 +141,7 @@ docker run --rm ghcr.io/hybridindie/comfyui-mcp:latest --help
 | `interrupt` | Interrupt the currently executing workflow. |
 | `get_queue_status` | Get detailed queue status including running and pending prompts. |
 | `clear_queue` | Clear pending and/or running items from the queue. |
+| `get_progress` | Get execution progress for a workflow by prompt_id. Returns status, queue position, and outputs. |
 
 ### Discovery
 
@@ -380,6 +385,12 @@ Sensitive fields (`token`, `password`, `secret`, `api_key`, `authorization`) are
 - Configurable TLS verification, connect/read timeouts
 - Retries on connection errors with backoff (3 retries default). HTTP 4xx/5xx errors raised immediately (no retry)
 
+**WebSocket Progress** (`progress.py`)
+- On-demand WebSocket connections for real-time execution tracking (step progress, current node, outputs)
+- Automatic HTTP polling fallback if WebSocket connection fails
+- TLS/SSL passthrough for secure ComfyUI connections
+- Per-prompt event filtering (ignores events from other concurrent jobs)
+
 **Configuration** (`config.py`)
 - `yaml.safe_load` only, env var overrides limited to specific keys, Pydantic type validation
 
@@ -410,10 +421,12 @@ flowchart TB
         end
 
         API[ComfyUI Client<br/>httpx]
+        WS[WebSocket Progress<br/>websockets]
     end
 
     subgraph ComfyUI["ComfyUI Server"]
         CS[REST API<br/>port 8188]
+        CWS[WebSocket<br/>/ws]
     end
 
     MC <--MCP--> MCP
@@ -423,7 +436,9 @@ flowchart TB
     MCP --> Security
     Security --> Tools
     Tools --> API
+    Tools --> WS
     API --httpx--> CS
+    WS --websockets--> CWS
 ```
 
 ### Components
@@ -433,6 +448,7 @@ flowchart TB
 | Server | `server.py` | Entry point, wires components, registers tools |
 | Config | `config.py` | Pydantic settings, YAML loading, env overrides |
 | Client | `client.py` | Async HTTP client for ComfyUI REST API |
+| Progress | `progress.py` | WebSocket progress tracking with HTTP polling fallback |
 | Audit | `audit.py` | Structured JSON logging with redaction |
 | Workflow Inspector | `security/inspector.py` | Node type detection, dangerous pattern matching |
 | Node Auditor | `security/node_auditor.py` | Scans installed nodes for dangerous patterns |
@@ -448,15 +464,21 @@ src/comfyui_mcp/
 ├── server.py              # MCP server entry point, wires all components
 ├── config.py              # Pydantic settings, YAML loading, env overrides
 ├── client.py              # Async HTTP client for ComfyUI API
+├── progress.py            # WebSocket progress tracking with HTTP polling fallback
 ├── audit.py               # Structured JSON audit logger
 ├── security/
 │   ├── inspector.py       # Workflow node inspection (audit/enforce)
 │   ├── node_auditor.py    # Scans installed nodes for dangerous patterns
 │   ├── sanitizer.py       # File path validation
 │   └── rate_limit.py      # Token-bucket rate limiter
+├── workflow/
+│   ├── templates.py       # Built-in workflow templates (txt2img, img2img, upscale, etc.)
+│   ├── operations.py      # Workflow graph operations (add/remove nodes, connect, etc.)
+│   └── validation.py      # Workflow analysis and validation
 └── tools/
     ├── generation.py      # generate_image, run_workflow, summarize_workflow
-    ├── jobs.py            # get_queue, get_job, cancel_job, interrupt, clear_queue
+    ├── workflow.py         # create_workflow, modify_workflow, validate_workflow
+    ├── jobs.py            # get_queue, get_job, cancel_job, interrupt, get_progress
     ├── discovery.py       # list_models, list_nodes, audit_dangerous_nodes, etc.
     ├── history.py         # get_history
     └── files.py           # upload_image, get_image, list_outputs, upload_mask, get_workflow_from_image
