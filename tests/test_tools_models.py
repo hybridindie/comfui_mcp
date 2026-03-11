@@ -7,11 +7,12 @@ from mcp.server.fastmcp import FastMCP
 
 from comfyui_mcp.audit import AuditLogger
 from comfyui_mcp.client import ComfyUIClient
-from comfyui_mcp.config import ModelSearchSettings
+from comfyui_mcp.config import ModelSearchSettings, Settings
 from comfyui_mcp.model_manager import ModelManagerDetector
 from comfyui_mcp.security.download_validator import DownloadValidator
 from comfyui_mcp.security.rate_limit import RateLimiter
 from comfyui_mcp.security.sanitizer import PathSanitizer
+from comfyui_mcp.server import _build_server
 from comfyui_mcp.tools.models import register_model_tools
 
 
@@ -275,3 +276,10 @@ class TestCancelDownload:
             or "canceled" in result.lower()
             or "success" in result.lower()
         )
+
+
+class TestServerWiring:
+    def test_model_tools_registered(self):
+        """Verify that _register_all_tools accepts the new parameters."""
+        server, _settings = _build_server(settings=Settings())
+        assert server is not None

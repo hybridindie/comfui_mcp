@@ -9,8 +9,11 @@ from mcp.server.fastmcp import FastMCP
 from comfyui_mcp.audit import AuditLogger
 from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.config import Settings, load_settings
+from comfyui_mcp.model_manager import ModelManagerDetector
 from comfyui_mcp.progress import WebSocketProgress
+from comfyui_mcp.security.download_validator import DownloadValidator
 from comfyui_mcp.security.inspector import WorkflowInspector
+from comfyui_mcp.security.model_checker import ModelChecker
 from comfyui_mcp.security.node_auditor import NodeAuditor
 from comfyui_mcp.security.rate_limit import RateLimiter
 from comfyui_mcp.security.sanitizer import PathSanitizer
@@ -19,6 +22,7 @@ from comfyui_mcp.tools.files import register_file_tools
 from comfyui_mcp.tools.generation import register_generation_tools
 from comfyui_mcp.tools.history import register_history_tools
 from comfyui_mcp.tools.jobs import register_job_tools
+from comfyui_mcp.tools.models import register_model_tools
 from comfyui_mcp.tools.workflow import register_workflow_tools
 
 
@@ -74,6 +78,11 @@ def _register_all_tools(
     sanitizer: PathSanitizer,
     node_auditor: NodeAuditor,
     progress: WebSocketProgress,
+    detector: ModelManagerDetector,
+    model_sanitizer: PathSanitizer,
+    download_validator: DownloadValidator,
+    model_checker: ModelChecker,
+    model_search_settings: Settings,
 ) -> None:
     """Register all MCP tool groups with their dependencies."""
     register_discovery_tools(server, client, audit, rate_limiters["read"], sanitizer, node_auditor)
@@ -97,6 +106,17 @@ def _register_all_tools(
         progress=progress,
     )
     register_workflow_tools(server, client, audit, rate_limiters["read"], inspector)
+    register_model_tools(
+        mcp=server,
+        client=client,
+        audit=audit,
+        read_limiter=rate_limiters["read"],
+        file_limiter=rate_limiters["file"],
+        sanitizer=model_sanitizer,
+        detector=detector,
+        validator=download_validator,
+        search_settings=model_search_settings.model_search,
+    )
 
 
 def _build_server(settings: Settings | None = None) -> tuple[FastMCP, Settings]:
@@ -110,6 +130,18 @@ def _build_server(settings: Settings | None = None) -> tuple[FastMCP, Settings]:
     sanitizer = _create_path_sanitizer(settings)
     node_auditor = NodeAuditor()
     rate_limiters = _create_rate_limiters(settings)
+
+    # Model tools dependencies
+    detector = ModelManagerDetector(client)
+    model_sanitizer = PathSanitizer(
+        allowed_extensions=settings.security.allowed_model_extensions,
+        max_size_mb=settings.security.max_upload_size_mb,
+    )
+    download_validator = DownloadValidator(
+        allowed_domains=settings.security.allowed_download_domains,
+        allowed_extensions=settings.security.allowed_model_extensions,
+    )
+    model_checker = ModelChecker()
 
     server_kwargs: dict = {
         "name": "ComfyUI",
@@ -144,6 +176,11 @@ def _build_server(settings: Settings | None = None) -> tuple[FastMCP, Settings]:
         sanitizer,
         node_auditor,
         progress,
+        detector=detector,
+        model_sanitizer=model_sanitizer,
+        download_validator=download_validator,
+        model_checker=model_checker,
+        model_search_settings=settings,
     )
 
     return server, settings
