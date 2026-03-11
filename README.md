@@ -163,6 +163,17 @@ docker run --rm ghcr.io/hybridindie/comfyui-mcp:latest --help
 |------|-------------|
 | `get_history` | Browse execution history (read-only). |
 
+### Model Search & Download
+
+| Tool | Description |
+|------|-------------|
+| `search_models` | Search HuggingFace or CivitAI for models. Returns name, download URL, size, and stats. |
+| `download_model` | Download a model via [ComfyUI-Model-Manager](https://github.com/hayden-fr/ComfyUI-Model-Manager). URL and extension validated. |
+| `get_download_tasks` | Check status of active model downloads (progress, speed, status). |
+| `cancel_download` | Cancel a model download task. |
+
+> **Requires:** [ComfyUI-Model-Manager](https://github.com/hayden-fr/ComfyUI-Model-Manager) installed in your ComfyUI instance. Download tools are gated behind lazy detection — if Model Manager is not installed, these tools return a helpful error message. `search_models` works without it.
+
 ### File Operations
 
 | Tool | Description |
@@ -242,6 +253,10 @@ Environment variables override config file values:
 | `COMFYUI_TIMEOUT_READ` | `comfyui.timeout_read` |
 | `COMFYUI_SECURITY_MODE` | `security.mode` |
 | `COMFYUI_AUDIT_FILE` | `logging.audit_file` |
+| `COMFYUI_HUGGINGFACE_TOKEN` | `model_search.huggingface_token` |
+| `COMFYUI_CIVITAI_API_KEY` | `model_search.civitai_api_key` |
+| `COMFYUI_MAX_SEARCH_RESULTS` | `model_search.max_search_results` |
+| `COMFYUI_ALLOWED_DOWNLOAD_DOMAINS` | `security.allowed_download_domains` |
 
 ## Security modes
 
@@ -454,6 +469,9 @@ flowchart TB
 | Node Auditor | `security/node_auditor.py` | Scans installed nodes for dangerous patterns |
 | Path Sanitizer | `security/sanitizer.py` | Path traversal, extension filtering |
 | Rate Limiter | `security/rate_limit.py` | Token-bucket per tool category |
+| Download Validator | `security/download_validator.py` | URL domain/path and extension validation for downloads |
+| Model Checker | `security/model_checker.py` | Proactive missing model detection in workflows |
+| Model Manager | `model_manager.py` | Lazy detection of ComfyUI-Model-Manager availability |
 
 ## Development
 
@@ -466,11 +484,14 @@ src/comfyui_mcp/
 ├── client.py              # Async HTTP client for ComfyUI API
 ├── progress.py            # WebSocket progress tracking with HTTP polling fallback
 ├── audit.py               # Structured JSON audit logger
+├── model_manager.py       # Lazy Model Manager detection and validation
 ├── security/
 │   ├── inspector.py       # Workflow node inspection (audit/enforce)
 │   ├── node_auditor.py    # Scans installed nodes for dangerous patterns
 │   ├── sanitizer.py       # File path validation
-│   └── rate_limit.py      # Token-bucket rate limiter
+│   ├── rate_limit.py      # Token-bucket rate limiter
+│   ├── download_validator.py  # URL/extension validation for model downloads
+│   └── model_checker.py   # Proactive model availability checking
 ├── workflow/
 │   ├── templates.py       # Built-in workflow templates (txt2img, img2img, upscale, etc.)
 │   ├── operations.py      # Workflow graph operations (add/remove nodes, connect, etc.)
@@ -481,7 +502,8 @@ src/comfyui_mcp/
     ├── jobs.py            # get_queue, get_job, cancel_job, interrupt, get_progress
     ├── discovery.py       # list_models, list_nodes, audit_dangerous_nodes, etc.
     ├── history.py         # get_history
-    └── files.py           # upload_image, get_image, list_outputs, upload_mask, get_workflow_from_image
+    ├── files.py           # upload_image, get_image, list_outputs, upload_mask, get_workflow_from_image
+    └── models.py          # search_models, download_model, get_download_tasks, cancel_download
 ```
 
 ### Run tests
