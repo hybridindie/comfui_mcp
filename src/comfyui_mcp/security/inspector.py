@@ -54,6 +54,11 @@ class WorkflowInspector:
         self._dangerous_nodes = set(dangerous_nodes or [])
         self._allowed_nodes = set(allowed_nodes or [])
 
+    @property
+    def mode(self) -> str:
+        """Return the current inspection mode ('audit' or 'enforce')."""
+        return self._mode
+
     def inspect(self, workflow: dict) -> InspectionResult:
         """Inspect a ComfyUI workflow and return findings."""
         nodes_used = []

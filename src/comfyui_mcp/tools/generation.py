@@ -13,7 +13,8 @@ from mcp.server.fastmcp import FastMCP
 from comfyui_mcp.audit import AuditLogger
 from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.progress import WebSocketProgress
-from comfyui_mcp.security.inspector import WorkflowInspector
+from comfyui_mcp.security.inspector import WorkflowBlockedError, WorkflowInspector
+from comfyui_mcp.security.model_checker import ModelChecker
 from comfyui_mcp.security.rate_limit import RateLimiter
 from comfyui_mcp.workflow.validation import SAMPLER_NODE_TYPES as _SAMPLER_NODE_TYPES
 from comfyui_mcp.workflow.validation import WorkflowAnalysis
@@ -151,6 +152,7 @@ def register_generation_tools(
     *,
     read_limiter: RateLimiter | None = None,
     progress: WebSocketProgress | None = None,
+    model_checker: ModelChecker | None = None,
 ) -> dict[str, Any]:
     """Register generation tools."""
     tool_fns: dict[str, Any] = {}
@@ -174,6 +176,14 @@ def register_generation_tools(
 
         # Inspect the workflow
         inspection = inspector.inspect(wf)
+        if model_checker is not None:
+            model_warnings = await model_checker.check_models(wf, client)
+            if model_warnings:
+                inspection.warnings.extend(model_warnings)
+                if inspector.mode == "enforce":
+                    raise WorkflowBlockedError(
+                        f"Workflow blocked — missing models: {model_warnings}"
+                    )
         audit.log(
             tool="run_workflow",
             action="inspected",
@@ -244,6 +254,14 @@ def register_generation_tools(
         wf = _build_txt2img_workflow(prompt, negative_prompt, width, height, steps, cfg, model)
 
         inspection = inspector.inspect(wf)
+        if model_checker is not None:
+            model_warnings = await model_checker.check_models(wf, client)
+            if model_warnings:
+                inspection.warnings.extend(model_warnings)
+                if inspector.mode == "enforce":
+                    raise WorkflowBlockedError(
+                        f"Workflow blocked — missing models: {model_warnings}"
+                    )
         audit.log(
             tool="generate_image",
             action="inspected",

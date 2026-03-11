@@ -104,6 +104,7 @@ def _register_all_tools(
         inspector,
         read_limiter=rate_limiters["read"],
         progress=progress,
+        model_checker=model_checker,
     )
     register_workflow_tools(server, client, audit, rate_limiters["read"], inspector)
     register_model_tools(

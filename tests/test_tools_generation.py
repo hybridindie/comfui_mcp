@@ -1,6 +1,7 @@
 """Tests for generation and workflow execution MCP tools."""
 
 import json
+import unittest.mock
 
 import httpx
 import pytest
@@ -11,6 +12,7 @@ from comfyui_mcp.audit import AuditLogger
 from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.progress import WebSocketProgress
 from comfyui_mcp.security.inspector import WorkflowBlockedError, WorkflowInspector
+from comfyui_mcp.security.model_checker import ModelChecker
 from comfyui_mcp.security.rate_limit import RateLimiter
 from comfyui_mcp.tools.generation import (
     _format_summary,
@@ -699,3 +701,138 @@ class TestRunWorkflowWait:
         assert "nowait-456" in result
         # Should be plain string, not JSON
         assert not result.startswith("{")
+
+
+class TestModelCheckIntegration:
+    @respx.mock
+    async def test_run_workflow_warns_missing_model(self, components):
+        client, audit, limiter, inspector = components
+        respx.get("http://test:8188/models/checkpoints").mock(
+            return_value=httpx.Response(200, json=["other_model.safetensors"])
+        )
+        respx.post("http://test:8188/prompt").mock(
+            return_value=httpx.Response(200, json={"prompt_id": "abc-123"})
+        )
+        mcp_server = FastMCP("test")
+        model_checker = ModelChecker()
+        tools = register_generation_tools(
+            mcp_server, client, audit, limiter, inspector, model_checker=model_checker
+        )
+        workflow = json.dumps(
+            {
+                "4": {
+                    "class_type": "CheckpointLoaderSimple",
+                    "inputs": {"ckpt_name": "missing_model.safetensors"},
+                },
+                "3": {
+                    "class_type": "KSampler",
+                    "inputs": {"model": ["4", 0]},
+                },
+            }
+        )
+        result = await tools["run_workflow"](workflow=workflow)
+        assert "Missing model" in result
+        assert "missing_model.safetensors" in result
+        assert "search_models" in result
+
+    @respx.mock
+    async def test_run_workflow_no_warning_when_model_present(self, components):
+        client, audit, limiter, inspector = components
+        respx.get("http://test:8188/models/checkpoints").mock(
+            return_value=httpx.Response(200, json=["present_model.safetensors"])
+        )
+        respx.post("http://test:8188/prompt").mock(
+            return_value=httpx.Response(200, json={"prompt_id": "abc-456"})
+        )
+        mcp_server = FastMCP("test")
+        model_checker = ModelChecker()
+        tools = register_generation_tools(
+            mcp_server, client, audit, limiter, inspector, model_checker=model_checker
+        )
+        workflow = json.dumps(
+            {
+                "4": {
+                    "class_type": "CheckpointLoaderSimple",
+                    "inputs": {"ckpt_name": "present_model.safetensors"},
+                },
+            }
+        )
+        result = await tools["run_workflow"](workflow=workflow)
+        assert "abc-456" in result
+        assert "Missing model" not in result
+
+    @respx.mock
+    async def test_generate_image_warns_missing_model(self, components):
+        client, audit, limiter, inspector = components
+        respx.get("http://test:8188/models/checkpoints").mock(
+            return_value=httpx.Response(200, json=["other_model.safetensors"])
+        )
+        respx.post("http://test:8188/prompt").mock(
+            return_value=httpx.Response(200, json={"prompt_id": "img-001"})
+        )
+        mcp_server = FastMCP("test")
+        model_checker = ModelChecker()
+        tools = register_generation_tools(
+            mcp_server, client, audit, limiter, inspector, model_checker=model_checker
+        )
+        result = await tools["generate_image"](prompt="a cat", model="missing_model.safetensors")
+        assert "Missing model" in result
+        assert "missing_model.safetensors" in result
+
+    async def test_run_workflow_enforce_mode_blocks_missing_model(self, tmp_path):
+        client = ComfyUIClient(base_url="http://test:8188")
+        audit = AuditLogger(audit_file=tmp_path / "audit.log")
+        limiter = RateLimiter(max_per_minute=60)
+        inspector = WorkflowInspector(
+            mode="enforce",
+            dangerous_nodes=[],
+            allowed_nodes=["CheckpointLoaderSimple", "KSampler"],
+        )
+        mcp_server = FastMCP("test")
+        model_checker = ModelChecker()
+
+        _missing_warning = (
+            "Missing model: 'gone.safetensors' not found in checkpoints. "
+            "Use search_models to find and download_model to install it."
+        )
+
+        async def fake_check_models(wf, cl):
+            return [_missing_warning]
+
+        with unittest.mock.patch.object(
+            model_checker, "check_models", side_effect=fake_check_models
+        ):
+            tools = register_generation_tools(
+                mcp_server, client, audit, limiter, inspector, model_checker=model_checker
+            )
+            workflow = json.dumps(
+                {
+                    "4": {
+                        "class_type": "CheckpointLoaderSimple",
+                        "inputs": {"ckpt_name": "gone.safetensors"},
+                    },
+                }
+            )
+            with pytest.raises(WorkflowBlockedError, match="missing models"):
+                await tools["run_workflow"](workflow=workflow)
+
+    @respx.mock
+    async def test_run_workflow_no_model_checker_passes_through(self, components):
+        client, audit, limiter, inspector = components
+        respx.post("http://test:8188/prompt").mock(
+            return_value=httpx.Response(200, json={"prompt_id": "pass-123"})
+        )
+        mcp_server = FastMCP("test")
+        # No model_checker passed — should work fine without checking models
+        tools = register_generation_tools(mcp_server, client, audit, limiter, inspector)
+        workflow = json.dumps(
+            {
+                "4": {
+                    "class_type": "CheckpointLoaderSimple",
+                    "inputs": {"ckpt_name": "any_model.safetensors"},
+                },
+            }
+        )
+        result = await tools["run_workflow"](workflow=workflow)
+        assert "pass-123" in result
+        assert "Missing model" not in result
