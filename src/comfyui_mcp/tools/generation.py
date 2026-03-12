@@ -168,9 +168,19 @@ def _format_summary(analysis: WorkflowAnalysis) -> str:
 
 
 def _escape_mermaid_text(value: Any) -> str:
-    """Escape text used in Mermaid node labels."""
+    """Escape text used in Mermaid node labels.
+
+    HTML-escapes special characters so that user-controlled workflow values
+    (model names, prompt text, etc.) cannot inject markup or break Mermaid
+    diagrams in renderers that parse label content as HTML.
+    The order matters: '&' must be replaced before '<'/'>' to avoid
+    double-escaping.
+    """
     text = str(value)
-    text = text.replace('"', "'")
+    text = text.replace("&", "&amp;")
+    text = text.replace("<", "&lt;")
+    text = text.replace(">", "&gt;")
+    text = text.replace('"', "&#34;")
     return text.replace("\n", " ")
 
 

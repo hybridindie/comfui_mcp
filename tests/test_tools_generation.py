@@ -586,6 +586,36 @@ class TestSummarizeWorkflow:
             await tools["summarize_workflow"](workflow="not json")
 
     @respx.mock
+    async def test_mermaid_escapes_html_characters(self, components):
+        """Mermaid labels must HTML-escape <, >, &, and " from workflow values."""
+        client, audit, limiter, inspector = components
+        read_limiter = RateLimiter(max_per_minute=60)
+        respx.get("http://test:8188/object_info").mock(return_value=httpx.Response(200, json={}))
+        mcp_server = FastMCP("test")
+        tools = register_generation_tools(
+            mcp_server,
+            client,
+            audit,
+            limiter,
+            inspector,
+            read_limiter=read_limiter,
+        )
+        workflow = {
+            "4": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": '<script>alert("xss")</script>&model.safetensors'},
+            },
+        }
+        result = await tools["summarize_workflow"](
+            workflow=json.dumps(workflow),
+            format="mermaid",
+        )
+        assert "<script>" not in result
+        assert "&lt;script&gt;" in result
+        assert "&amp;" in result
+        assert "&#34;" in result
+
+    @respx.mock
     async def test_supports_mermaid_output(self, components):
         client, audit, limiter, inspector = components
         read_limiter = RateLimiter(max_per_minute=60)
