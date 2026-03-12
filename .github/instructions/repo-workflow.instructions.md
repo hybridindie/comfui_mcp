@@ -5,6 +5,7 @@ name: "Repo Workflow Preferences"
 # Repo Workflow Preferences
 
 - Execute repository workflow requests directly when asked: create logical commits, push updates, address PR comments, and merge when checks are green.
+- Every issue must be resolved by its own dedicated PR. Never include changes for two or more separate issues in the same PR unless those issues are explicitly part of the same Epic.
 - Keep commit history clean and task-oriented: separate code fixes, scripts/tooling, and documentation into distinct commits when practical.
 - When behavior/config changes affect operators or contributors, update relevant docs in the same workstream (`README.md`, `CONTRIBUTING.md`, `config.example.yaml`, `CLAUDE.md`) before finalizing.
 - After addressing PR feedback, verify tests/lint for changed files, push, and post a concise PR update comment summarizing what changed.
