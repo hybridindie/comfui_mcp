@@ -198,3 +198,109 @@ class TestAuditDangerousNodes:
         assert result["total_nodes"] == 2
         assert "dangerous" in result
         assert "suspicious" in result
+
+
+_SYSTEM_STATS_RESPONSE = {
+    "system": {
+        "os": "posix",
+        "comfyui_version": "0.3.10",
+        "python_version": "3.12.0 (main)",
+        "embedded_python": False,
+        "hostname": "myserver",
+    },
+    "devices": [
+        {
+            "name": "NVIDIA RTX 4090",
+            "type": "cuda",
+            "index": 0,
+            "vram_total": 24 * 1024 * 1024 * 1024,
+            "vram_free": 20 * 1024 * 1024 * 1024,
+            "torch_vram_total": 24 * 1024 * 1024 * 1024,
+            "torch_vram_free": 20 * 1024 * 1024 * 1024,
+        }
+    ],
+}
+
+_QUEUE_RESPONSE = {
+    "queue_running": [["id1", "prompt1", {}, {}, []]],
+    "queue_pending": [],
+}
+
+
+class TestGetSystemInfo:
+    @respx.mock
+    async def test_returns_whitelisted_fields(self, components):
+        client, audit, limiter, sanitizer = components
+        respx.get("http://test:8188/system_stats").mock(
+            return_value=httpx.Response(200, json=_SYSTEM_STATS_RESPONSE)
+        )
+        respx.get("http://test:8188/queue").mock(
+            return_value=httpx.Response(200, json=_QUEUE_RESPONSE)
+        )
+        mcp = FastMCP("test")
+        tools = register_discovery_tools(mcp, client, audit, limiter, sanitizer)
+
+        result = await tools["get_system_info"]()
+
+        assert result["comfyui_version"] == "0.3.10"
+        assert len(result["devices"]) == 1
+        gpu = result["devices"][0]
+        assert gpu["name"] == "NVIDIA RTX 4090"
+        assert gpu["vram_total_mb"] == 24 * 1024
+        assert gpu["vram_free_mb"] == 20 * 1024
+        assert result["queue"]["running"] == 1
+        assert result["queue"]["pending"] == 0
+
+    @respx.mock
+    async def test_strips_sensitive_fields(self, components):
+        client, audit, limiter, sanitizer = components
+        respx.get("http://test:8188/system_stats").mock(
+            return_value=httpx.Response(200, json=_SYSTEM_STATS_RESPONSE)
+        )
+        respx.get("http://test:8188/queue").mock(
+            return_value=httpx.Response(200, json=_QUEUE_RESPONSE)
+        )
+        mcp = FastMCP("test")
+        tools = register_discovery_tools(mcp, client, audit, limiter, sanitizer)
+
+        result = await tools["get_system_info"]()
+
+        # Sensitive fields must not appear at any level
+        result_str = str(result)
+        assert "hostname" not in result_str
+        assert "python_version" not in result_str
+        assert "myserver" not in result_str
+        assert "3.12.0" not in result_str
+        assert "os" not in result_str
+
+    @respx.mock
+    async def test_handles_missing_devices(self, components):
+        client, audit, limiter, sanitizer = components
+        respx.get("http://test:8188/system_stats").mock(
+            return_value=httpx.Response(200, json={"system": {"comfyui_version": "0.3.10"}})
+        )
+        respx.get("http://test:8188/queue").mock(
+            return_value=httpx.Response(200, json={"queue_running": [], "queue_pending": []})
+        )
+        mcp = FastMCP("test")
+        tools = register_discovery_tools(mcp, client, audit, limiter, sanitizer)
+
+        result = await tools["get_system_info"]()
+
+        assert result["devices"] == []
+        assert result["comfyui_version"] == "0.3.10"
+        assert result["queue"] == {"running": 0, "pending": 0}
+
+    @respx.mock
+    async def test_rate_limit_enforced(self, tmp_path):
+        client = ComfyUIClient(base_url="http://test:8188")
+        audit = AuditLogger(audit_file=tmp_path / "audit.log")
+        limiter = RateLimiter(max_per_minute=0)
+        sanitizer = PathSanitizer(allowed_extensions=_ALLOWED_EXTENSIONS)
+        mcp = FastMCP("test")
+        tools = register_discovery_tools(mcp, client, audit, limiter, sanitizer)
+
+        from comfyui_mcp.security.rate_limit import RateLimitError
+
+        with pytest.raises(RateLimitError):
+            await tools["get_system_info"]()

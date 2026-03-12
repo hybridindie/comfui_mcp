@@ -151,6 +151,15 @@ class TestComfyUIClient:
         assert "exec_info" in result
 
     @respx.mock
+    async def test_get_system_stats(self, client):
+        payload = {"system": {"comfyui_version": "0.3.10"}, "devices": []}
+        respx.get("http://test-comfyui:8188/system_stats").mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+        result = await client.get_system_stats()
+        assert result["system"]["comfyui_version"] == "0.3.10"
+
+    @respx.mock
     async def test_clear_queue_pending(self, client):
         route = respx.post("http://test-comfyui:8188/queue").mock(
             return_value=httpx.Response(200, json={})

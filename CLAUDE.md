@@ -79,7 +79,8 @@ uv run python scripts/smoke_test.py --url http://host:8188   # Target a specific
 
 These are non-negotiable. This is a security-focused project.
 
-1. **Never expose blocked ComfyUI endpoints.** The following are deliberately excluded and must never be added to `client.py`: `/userdata`, `/free`, `/users`, `/history` POST (delete), `/system_stats`. Before adding any new client method, verify the endpoint is not on this list.
+1. **Never expose blocked ComfyUI endpoints.** The following are deliberately excluded: `/userdata`, `/free`, `/users`, `/history` POST (delete). They must never be added to `client.py`. Before adding any new client method, verify the endpoint is not on this list.
+    `/system_stats` is a special case: it **may** be called internally by `get_system_stats()` in `client.py`, but **only** to serve the `get_system_info` tool, which applies a strict output whitelist (GPU VRAM, queue counts, ComfyUI version only). No raw `/system_stats` response is ever returned to any caller. Do not add any other callers of `get_system_stats()`.
 2. **All file-handling tools must use PathSanitizer.** Every tool that accepts a filename or subfolder parameter must call `sanitizer.validate_filename()` and/or `sanitizer.validate_subfolder()` before passing values to the client. No exceptions.
 3. **All tools must go through the rate limiter.** Every tool function must call `limiter.check("tool_name")` before doing any work.
 4. **All tools must audit log.** Every tool function must call `audit.log(tool="...", action="...")` with structured data. Sensitive fields are auto-redacted but never log raw user secrets intentionally.

@@ -15,6 +15,7 @@ This server adds five security layers between the AI assistant and ComfyUI:
 | **Rate Limiter** | Token-bucket rate limiting per tool category to prevent runaway loops. |
 | **Audit Logger** | Structured JSON logging of every operation with automatic redaction of sensitive fields (tokens, passwords). |
 | **Selective API Surface** | Only exposes safe ComfyUI endpoints. Dangerous endpoints (`/userdata`, `/free`, `/users`, `/system_stats`) are never proxied. |
+| **Selective API Surface** | Only exposes safe ComfyUI endpoints. Dangerous endpoints (`/userdata`, `/free`, `/users`) are never proxied. `/system_stats` is called internally by `get_system_info` but only a strict whitelist (GPU VRAM, queue counts, version) is returned. |
 
 ### Real-time progress tracking
 
@@ -159,6 +160,8 @@ docker run --rm ghcr.io/hybridindie/comfyui-mcp:latest --help
 | `list_model_folders` | List available model folder types. |
 | `get_model_metadata` | Get metadata for a specific model file. |
 | `audit_dangerous_nodes` | Scan all installed nodes to identify potentially dangerous ones. |
+| `audit_dangerous_nodes` | Scan all installed nodes to identify potentially dangerous ones. |
+| `get_system_info` | Sanitized GPU VRAM, queue depth, and ComfyUI version (whitelist-filtered from `/system_stats`). |
 
 ### History
 
@@ -213,6 +216,14 @@ These ComfyUI endpoints are **never** proxied due to security risks:
 - `/users` — user management
 - `/history` POST — delete history
 - `/system_stats` — unnecessary information disclosure
+These ComfyUI endpoints are **never** proxied due to security risks:
+
+- `/userdata` — arbitrary file read/write
+- `/free` — unload models (DoS vector)
+- `/users` — user management
+- `/history` POST — delete history
+
+`/system_stats` is called internally **only** by `get_system_info`, which applies a strict whitelist and never forwards the raw response.
 
 ## Configuration
 
@@ -423,6 +434,7 @@ Sensitive fields (`token`, `password`, `secret`, `api_key`, `authorization`) are
 | Denial of service via request flooding | Medium | Token-bucket rate limiter per tool category |
 | Credential leakage in logs | Medium | Automatic redaction of `token`, `password`, `secret`, `api_key`, `authorization` |
 | Information disclosure via API | Low | Dangerous endpoints (`/userdata`, `/free`, `/system_stats`) never proxied |
+| Information disclosure via API | Low | Dangerous endpoints (`/userdata`, `/free`) never proxied; `/system_stats` whitelist-filtered by `get_system_info` |
 | MITM on ComfyUI connection | Medium | Configurable TLS verification |
 
 ### Security controls by component

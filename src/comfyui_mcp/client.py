@@ -149,6 +149,17 @@ class ComfyUIClient:
         r = await self._request("get", "/prompt")
         return r.json()
 
+    async def get_system_stats(self) -> dict:
+        """GET /system_stats — raw ComfyUI system statistics.
+
+        NOTE: /system_stats is on the blocked-endpoint list for direct exposure.
+        This method is called exclusively by the get_system_info tool, which
+        applies a strict whitelist before returning any data. No raw response
+        is ever forwarded to callers. Do not add any other callers.
+        """
+        r = await self._request("get", "/system_stats")
+        return r.json()
+
     async def clear_queue(self, clear_running: bool = False, clear_pending: bool = False) -> None:
         data: dict[str, list[str]] = {"clear": []}
         if clear_running:

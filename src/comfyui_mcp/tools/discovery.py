@@ -156,4 +156,56 @@ def register_discovery_tools(
 
     tool_fns["audit_dangerous_nodes"] = audit_dangerous_nodes
 
+    @mcp.tool()
+    async def get_system_info() -> dict:
+        """Return sanitized ComfyUI system information.
+
+        Returns a whitelist-filtered subset of system stats useful for making
+        generation decisions: GPU VRAM, queue depth, and ComfyUI version.
+        Sensitive fields (hostname, OS, CPU details, file paths, Python version,
+        network interfaces) are deliberately excluded.
+
+        Returns:
+            Dictionary with keys: comfyui_version, devices (list of GPU info),
+            queue (running/pending counts).
+        """
+        limiter.check("get_system_info")
+        audit.log(tool="get_system_info", action="called")
+
+        raw = await client.get_system_stats()
+        queue_raw = await client.get_queue()
+
+        # Whitelist: only forward fields that are safe to expose
+        devices: list[dict] = []
+        for device in raw.get("devices", []):
+            if not isinstance(device, dict):
+                continue
+            entry: dict = {}
+            if "name" in device:
+                entry["name"] = str(device["name"])
+            vram_total = device.get("vram_total")
+            vram_free = device.get("vram_free")
+            if isinstance(vram_total, int | float):
+                entry["vram_total_mb"] = round(vram_total / (1024 * 1024))
+            if isinstance(vram_free, int | float):
+                entry["vram_free_mb"] = round(vram_free / (1024 * 1024))
+            if "torch_vram_total" in device and isinstance(device["torch_vram_total"], int | float):
+                entry["torch_vram_total_mb"] = round(device["torch_vram_total"] / (1024 * 1024))
+            if "torch_vram_free" in device and isinstance(device["torch_vram_free"], int | float):
+                entry["torch_vram_free_mb"] = round(device["torch_vram_free"] / (1024 * 1024))
+            if entry:
+                devices.append(entry)
+
+        running = len(queue_raw.get("queue_running", []))
+        pending = len(queue_raw.get("queue_pending", []))
+
+        result: dict = {
+            "comfyui_version": str(raw.get("system", {}).get("comfyui_version", "unknown")),
+            "devices": devices,
+            "queue": {"running": running, "pending": pending},
+        }
+        return result
+
+    tool_fns["get_system_info"] = get_system_info
+
     return tool_fns
