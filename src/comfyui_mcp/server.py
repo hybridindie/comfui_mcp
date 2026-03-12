@@ -107,7 +107,7 @@ def _register_all_tools(
         model_checker=model_checker,
         sanitizer=sanitizer,
     )
-    register_workflow_tools(server, client, audit, rate_limiters["read"], inspector)
+    register_workflow_tools(server, client, audit, rate_limiters["read"], inspector, sanitizer)
     register_model_tools(
         mcp=server,
         client=client,

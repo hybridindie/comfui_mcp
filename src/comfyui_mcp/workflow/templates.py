@@ -271,209 +271,115 @@ _TXT2VID_WAN: dict[str, dict[str, Any]] = {
     },
 }
 
+
+def _build_controlnet_template(
+    preprocessor_class: str,
+    preprocessor_inputs: dict[str, Any],
+    control_net_name: str,
+    filename_prefix: str,
+) -> dict[str, dict[str, Any]]:
+    """Build a ControlNet template graph with variant-specific preprocessing."""
+    return {
+        "1": {
+            "class_type": "CheckpointLoaderSimple",
+            "inputs": {"ckpt_name": "v1-5-pruned-emaonly.safetensors"},
+        },
+        "2": {
+            "class_type": "LoadImage",
+            "inputs": {"image": "control.png"},
+        },
+        "3": {
+            "class_type": preprocessor_class,
+            "inputs": copy.deepcopy(preprocessor_inputs),
+        },
+        "4": {
+            "class_type": "ControlNetLoader",
+            "inputs": {"control_net_name": control_net_name},
+        },
+        "5": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"text": "", "clip": ["1", 1]},
+        },
+        "6": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"text": "bad quality, blurry", "clip": ["1", 1]},
+        },
+        "7": {
+            "class_type": "ControlNetApplyAdvanced",
+            "inputs": {
+                "positive": ["5", 0],
+                "negative": ["6", 0],
+                "control_net": ["4", 0],
+                "image": ["3", 0],
+                "strength": 1.0,
+                "start_percent": 0.0,
+                "end_percent": 1.0,
+            },
+        },
+        "8": {
+            "class_type": "EmptyLatentImage",
+            "inputs": {"width": 512, "height": 512, "batch_size": 1},
+        },
+        "9": {
+            "class_type": "KSampler",
+            "inputs": {
+                "seed": 0,
+                "steps": 20,
+                "cfg": 7.0,
+                "sampler_name": "euler",
+                "scheduler": "normal",
+                "denoise": 1.0,
+                "model": ["1", 0],
+                "positive": ["7", 0],
+                "negative": ["7", 1],
+                "latent_image": ["8", 0],
+            },
+        },
+        "10": {
+            "class_type": "VAEDecode",
+            "inputs": {"samples": ["9", 0], "vae": ["1", 2]},
+        },
+        "11": {
+            "class_type": "SaveImage",
+            "inputs": {"filename_prefix": filename_prefix, "images": ["10", 0]},
+        },
+    }
+
+
 # --- controlnet_canny template ---
-_CONTROLNET_CANNY: dict[str, dict[str, Any]] = {
-    "1": {
-        "class_type": "CheckpointLoaderSimple",
-        "inputs": {"ckpt_name": "v1-5-pruned-emaonly.safetensors"},
+_CONTROLNET_CANNY: dict[str, dict[str, Any]] = _build_controlnet_template(
+    preprocessor_class="CannyEdgePreprocessor",
+    preprocessor_inputs={
+        "image": ["2", 0],
+        "low_threshold": 100,
+        "high_threshold": 200,
     },
-    "2": {
-        "class_type": "LoadImage",
-        "inputs": {"image": "control.png"},
-    },
-    "3": {
-        "class_type": "CannyEdgePreprocessor",
-        "inputs": {"image": ["2", 0], "low_threshold": 100, "high_threshold": 200},
-    },
-    "4": {
-        "class_type": "ControlNetLoader",
-        "inputs": {"control_net_name": "control_v11p_sd15_canny.safetensors"},
-    },
-    "5": {
-        "class_type": "CLIPTextEncode",
-        "inputs": {"text": "", "clip": ["1", 1]},
-    },
-    "6": {
-        "class_type": "CLIPTextEncode",
-        "inputs": {"text": "bad quality, blurry", "clip": ["1", 1]},
-    },
-    "7": {
-        "class_type": "ControlNetApplyAdvanced",
-        "inputs": {
-            "positive": ["5", 0],
-            "negative": ["6", 0],
-            "control_net": ["4", 0],
-            "image": ["3", 0],
-            "strength": 1.0,
-            "start_percent": 0.0,
-            "end_percent": 1.0,
-        },
-    },
-    "8": {
-        "class_type": "EmptyLatentImage",
-        "inputs": {"width": 512, "height": 512, "batch_size": 1},
-    },
-    "9": {
-        "class_type": "KSampler",
-        "inputs": {
-            "seed": 0,
-            "steps": 20,
-            "cfg": 7.0,
-            "sampler_name": "euler",
-            "scheduler": "normal",
-            "denoise": 1.0,
-            "model": ["1", 0],
-            "positive": ["7", 0],
-            "negative": ["7", 1],
-            "latent_image": ["8", 0],
-        },
-    },
-    "10": {
-        "class_type": "VAEDecode",
-        "inputs": {"samples": ["9", 0], "vae": ["1", 2]},
-    },
-    "11": {
-        "class_type": "SaveImage",
-        "inputs": {"filename_prefix": "comfyui-mcp-controlnet-canny", "images": ["10", 0]},
-    },
-}
+    control_net_name="control_v11p_sd15_canny.safetensors",
+    filename_prefix="comfyui-mcp-controlnet-canny",
+)
 
 # --- controlnet_depth template ---
-_CONTROLNET_DEPTH: dict[str, dict[str, Any]] = {
-    "1": {
-        "class_type": "CheckpointLoaderSimple",
-        "inputs": {"ckpt_name": "v1-5-pruned-emaonly.safetensors"},
+_CONTROLNET_DEPTH: dict[str, dict[str, Any]] = _build_controlnet_template(
+    preprocessor_class="MiDaS-DepthMapPreprocessor",
+    preprocessor_inputs={
+        "image": ["2", 0],
+        "a": 2.0,
+        "bg_threshold": 0.1,
     },
-    "2": {
-        "class_type": "LoadImage",
-        "inputs": {"image": "control.png"},
-    },
-    "3": {
-        "class_type": "MiDaS-DepthMapPreprocessor",
-        "inputs": {"image": ["2", 0], "a": 2.0, "bg_threshold": 0.1},
-    },
-    "4": {
-        "class_type": "ControlNetLoader",
-        "inputs": {"control_net_name": "control_v11f1p_sd15_depth.safetensors"},
-    },
-    "5": {
-        "class_type": "CLIPTextEncode",
-        "inputs": {"text": "", "clip": ["1", 1]},
-    },
-    "6": {
-        "class_type": "CLIPTextEncode",
-        "inputs": {"text": "bad quality, blurry", "clip": ["1", 1]},
-    },
-    "7": {
-        "class_type": "ControlNetApplyAdvanced",
-        "inputs": {
-            "positive": ["5", 0],
-            "negative": ["6", 0],
-            "control_net": ["4", 0],
-            "image": ["3", 0],
-            "strength": 1.0,
-            "start_percent": 0.0,
-            "end_percent": 1.0,
-        },
-    },
-    "8": {
-        "class_type": "EmptyLatentImage",
-        "inputs": {"width": 512, "height": 512, "batch_size": 1},
-    },
-    "9": {
-        "class_type": "KSampler",
-        "inputs": {
-            "seed": 0,
-            "steps": 20,
-            "cfg": 7.0,
-            "sampler_name": "euler",
-            "scheduler": "normal",
-            "denoise": 1.0,
-            "model": ["1", 0],
-            "positive": ["7", 0],
-            "negative": ["7", 1],
-            "latent_image": ["8", 0],
-        },
-    },
-    "10": {
-        "class_type": "VAEDecode",
-        "inputs": {"samples": ["9", 0], "vae": ["1", 2]},
-    },
-    "11": {
-        "class_type": "SaveImage",
-        "inputs": {"filename_prefix": "comfyui-mcp-controlnet-depth", "images": ["10", 0]},
-    },
-}
+    control_net_name="control_v11f1p_sd15_depth.safetensors",
+    filename_prefix="comfyui-mcp-controlnet-depth",
+)
 
 # --- controlnet_openpose template ---
-_CONTROLNET_OPENPOSE: dict[str, dict[str, Any]] = {
-    "1": {
-        "class_type": "CheckpointLoaderSimple",
-        "inputs": {"ckpt_name": "v1-5-pruned-emaonly.safetensors"},
+_CONTROLNET_OPENPOSE: dict[str, dict[str, Any]] = _build_controlnet_template(
+    preprocessor_class="DWPreprocessor",
+    preprocessor_inputs={
+        "image": ["2", 0],
+        "resolution": 512,
     },
-    "2": {
-        "class_type": "LoadImage",
-        "inputs": {"image": "control.png"},
-    },
-    "3": {
-        "class_type": "DWPreprocessor",
-        "inputs": {"image": ["2", 0], "resolution": 512},
-    },
-    "4": {
-        "class_type": "ControlNetLoader",
-        "inputs": {"control_net_name": "control_v11p_sd15_openpose.safetensors"},
-    },
-    "5": {
-        "class_type": "CLIPTextEncode",
-        "inputs": {"text": "", "clip": ["1", 1]},
-    },
-    "6": {
-        "class_type": "CLIPTextEncode",
-        "inputs": {"text": "bad quality, blurry", "clip": ["1", 1]},
-    },
-    "7": {
-        "class_type": "ControlNetApplyAdvanced",
-        "inputs": {
-            "positive": ["5", 0],
-            "negative": ["6", 0],
-            "control_net": ["4", 0],
-            "image": ["3", 0],
-            "strength": 1.0,
-            "start_percent": 0.0,
-            "end_percent": 1.0,
-        },
-    },
-    "8": {
-        "class_type": "EmptyLatentImage",
-        "inputs": {"width": 512, "height": 512, "batch_size": 1},
-    },
-    "9": {
-        "class_type": "KSampler",
-        "inputs": {
-            "seed": 0,
-            "steps": 20,
-            "cfg": 7.0,
-            "sampler_name": "euler",
-            "scheduler": "normal",
-            "denoise": 1.0,
-            "model": ["1", 0],
-            "positive": ["7", 0],
-            "negative": ["7", 1],
-            "latent_image": ["8", 0],
-        },
-    },
-    "10": {
-        "class_type": "VAEDecode",
-        "inputs": {"samples": ["9", 0], "vae": ["1", 2]},
-    },
-    "11": {
-        "class_type": "SaveImage",
-        "inputs": {
-            "filename_prefix": "comfyui-mcp-controlnet-openpose",
-            "images": ["10", 0],
-        },
-    },
-}
+    control_net_name="control_v11p_sd15_openpose.safetensors",
+    filename_prefix="comfyui-mcp-controlnet-openpose",
+)
 
 # --- ip_adapter template ---
 _IP_ADAPTER: dict[str, dict[str, Any]] = {

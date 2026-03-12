@@ -11,9 +11,35 @@ from comfyui_mcp.audit import AuditLogger
 from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.security.inspector import WorkflowInspector
 from comfyui_mcp.security.rate_limit import RateLimiter
+from comfyui_mcp.security.sanitizer import PathSanitizer, PathValidationError
 from comfyui_mcp.workflow.operations import apply_operations
 from comfyui_mcp.workflow.templates import create_from_template
 from comfyui_mcp.workflow.validation import validate_workflow as _validate_workflow
+
+_PATH_LIKE_TEMPLATE_PARAMS = {
+    "model",
+    "model_name",
+    "motion_module",
+    "controlnet_model",
+    "ipadapter_model",
+    "clip_vision_model",
+    "lora_name",
+    "face_restore_model",
+    "image",
+    "mask",
+}
+
+
+def _sanitize_template_params(
+    param_dict: dict[str, Any], sanitizer: PathSanitizer
+) -> dict[str, Any]:
+    """Sanitize filename-like template params to block traversal/null-byte inputs."""
+    sanitized = dict(param_dict)
+    for key in _PATH_LIKE_TEMPLATE_PARAMS:
+        value = sanitized.get(key)
+        if isinstance(value, str):
+            sanitized[key] = sanitizer.validate_path_segment(value, label=key)
+    return sanitized
 
 
 def register_workflow_tools(
@@ -22,6 +48,7 @@ def register_workflow_tools(
     audit: AuditLogger,
     limiter: RateLimiter,
     inspector: WorkflowInspector,
+    sanitizer: PathSanitizer,
 ) -> dict[str, Any]:
     """Register workflow composition tools."""
     tool_fns: dict[str, Any] = {}
@@ -50,7 +77,12 @@ def register_workflow_tools(
         if not isinstance(param_dict, dict):
             raise ValueError('params must be a JSON object (e.g. {"key": "value"})')
 
-        wf = create_from_template(template, param_dict)
+        try:
+            clean_params = _sanitize_template_params(param_dict, sanitizer)
+        except PathValidationError as e:
+            raise ValueError(str(e)) from e
+
+        wf = create_from_template(template, clean_params)
         audit.log(
             tool="create_workflow",
             action="created",

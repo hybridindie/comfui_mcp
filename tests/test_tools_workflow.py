@@ -13,6 +13,7 @@ from comfyui_mcp.audit import AuditLogger
 from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.security.inspector import WorkflowInspector
 from comfyui_mcp.security.rate_limit import RateLimiter
+from comfyui_mcp.security.sanitizer import PathSanitizer
 from comfyui_mcp.tools.workflow import register_workflow_tools
 
 
@@ -22,14 +23,32 @@ def components(tmp_path):
     audit = AuditLogger(audit_file=tmp_path / "audit.log")
     limiter = RateLimiter(max_per_minute=60)
     inspector = WorkflowInspector(mode="audit", dangerous_nodes=["EvalNode"], allowed_nodes=[])
-    return client, audit, limiter, inspector
+    sanitizer = PathSanitizer(
+        allowed_extensions=[
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".webp",
+            ".gif",
+            ".json",
+            ".safetensors",
+            ".ckpt",
+            ".pth",
+            ".pt",
+            ".onnx",
+            ".bin",
+            ".gguf",
+            ".patch",
+        ]
+    )
+    return client, audit, limiter, inspector, sanitizer
 
 
 class TestCreateWorkflow:
     async def test_creates_txt2img(self, components):
-        client, audit, limiter, inspector = components
+        client, audit, limiter, inspector, sanitizer = components
         mcp = FastMCP("test")
-        tools = register_workflow_tools(mcp, client, audit, limiter, inspector)
+        tools = register_workflow_tools(mcp, client, audit, limiter, inspector, sanitizer)
         result = await tools["create_workflow"](template="txt2img")
         wf = json.loads(result)
         class_types = {v["class_type"] for v in wf.values()}
@@ -37,9 +56,9 @@ class TestCreateWorkflow:
         assert "CheckpointLoaderSimple" in class_types
 
     async def test_creates_with_params(self, components):
-        client, audit, limiter, inspector = components
+        client, audit, limiter, inspector, sanitizer = components
         mcp = FastMCP("test")
-        tools = register_workflow_tools(mcp, client, audit, limiter, inspector)
+        tools = register_workflow_tools(mcp, client, audit, limiter, inspector, sanitizer)
         params = json.dumps({"prompt": "a dog", "steps": 30})
         result = await tools["create_workflow"](template="txt2img", params=params)
         wf = json.loads(result)
@@ -47,9 +66,9 @@ class TestCreateWorkflow:
         assert sampler["inputs"]["steps"] == 30
 
     async def test_creates_expanded_template(self, components):
-        client, audit, limiter, inspector = components
+        client, audit, limiter, inspector, sanitizer = components
         mcp = FastMCP("test")
-        tools = register_workflow_tools(mcp, client, audit, limiter, inspector)
+        tools = register_workflow_tools(mcp, client, audit, limiter, inspector, sanitizer)
         params = json.dumps({"control_strength": 0.8})
         result = await tools["create_workflow"](template="controlnet_canny", params=params)
         wf = json.loads(result)
@@ -59,27 +78,35 @@ class TestCreateWorkflow:
         assert control_apply["inputs"]["strength"] == 0.8
 
     async def test_invalid_template_raises(self, components):
-        client, audit, limiter, inspector = components
+        client, audit, limiter, inspector, sanitizer = components
         mcp = FastMCP("test")
-        tools = register_workflow_tools(mcp, client, audit, limiter, inspector)
+        tools = register_workflow_tools(mcp, client, audit, limiter, inspector, sanitizer)
         with pytest.raises(ValueError, match="Unknown template"):
             await tools["create_workflow"](template="nonexistent")
 
     async def test_audit_log_written(self, components):
-        client, audit, limiter, inspector = components
+        client, audit, limiter, inspector, sanitizer = components
         mcp = FastMCP("test")
-        tools = register_workflow_tools(mcp, client, audit, limiter, inspector)
+        tools = register_workflow_tools(mcp, client, audit, limiter, inspector, sanitizer)
         await tools["create_workflow"](template="txt2img")
         log_lines = audit._audit_file.read_text().strip().split("\n")
         entries = [json.loads(line) for line in log_lines]
         assert any(e["tool"] == "create_workflow" for e in entries)
 
+    async def test_rejects_path_traversal_param(self, components):
+        client, audit, limiter, inspector, sanitizer = components
+        mcp = FastMCP("test")
+        tools = register_workflow_tools(mcp, client, audit, limiter, inspector, sanitizer)
+        params = json.dumps({"controlnet_model": "../evil.safetensors"})
+        with pytest.raises(ValueError, match=r"path separator|path traversal"):
+            await tools["create_workflow"](template="controlnet_canny", params=params)
+
 
 class TestModifyWorkflow:
     async def test_adds_node(self, components):
-        client, audit, limiter, inspector = components
+        client, audit, limiter, inspector, sanitizer = components
         mcp = FastMCP("test")
-        tools = register_workflow_tools(mcp, client, audit, limiter, inspector)
+        tools = register_workflow_tools(mcp, client, audit, limiter, inspector, sanitizer)
         wf = json.dumps({"1": {"class_type": "KSampler", "inputs": {}}})
         ops = json.dumps([{"op": "add_node", "class_type": "SaveImage"}])
         result = await tools["modify_workflow"](workflow=wf, operations=ops)
@@ -87,17 +114,17 @@ class TestModifyWorkflow:
         assert "2" in modified
 
     async def test_invalid_workflow_json_raises(self, components):
-        client, audit, limiter, inspector = components
+        client, audit, limiter, inspector, sanitizer = components
         mcp = FastMCP("test")
-        tools = register_workflow_tools(mcp, client, audit, limiter, inspector)
+        tools = register_workflow_tools(mcp, client, audit, limiter, inspector, sanitizer)
         ops = json.dumps([{"op": "add_node", "class_type": "SaveImage"}])
         with pytest.raises(ValueError, match="Invalid JSON"):
             await tools["modify_workflow"](workflow="not json", operations=ops)
 
     async def test_invalid_operations_json_raises(self, components):
-        client, audit, limiter, inspector = components
+        client, audit, limiter, inspector, sanitizer = components
         mcp = FastMCP("test")
-        tools = register_workflow_tools(mcp, client, audit, limiter, inspector)
+        tools = register_workflow_tools(mcp, client, audit, limiter, inspector, sanitizer)
         wf = json.dumps({"1": {"class_type": "KSampler", "inputs": {}}})
         with pytest.raises(ValueError, match="Invalid JSON"):
             await tools["modify_workflow"](workflow=wf, operations="not json")
@@ -106,7 +133,7 @@ class TestModifyWorkflow:
 class TestValidateWorkflow:
     @respx.mock
     async def test_valid_workflow(self, components):
-        client, audit, limiter, inspector = components
+        client, audit, limiter, inspector, sanitizer = components
         respx.get("http://test:8188/object_info").mock(
             return_value=httpx.Response(
                 200,
@@ -116,16 +143,16 @@ class TestValidateWorkflow:
             )
         )
         mcp = FastMCP("test")
-        tools = register_workflow_tools(mcp, client, audit, limiter, inspector)
+        tools = register_workflow_tools(mcp, client, audit, limiter, inspector, sanitizer)
         wf = json.dumps({"1": {"class_type": "KSampler", "inputs": {}}})
         result = await tools["validate_workflow"](workflow=wf)
         parsed = json.loads(result)
         assert parsed["valid"] is True
 
     async def test_invalid_json_raises(self, components):
-        client, audit, limiter, inspector = components
+        client, audit, limiter, inspector, sanitizer = components
         mcp = FastMCP("test")
-        tools = register_workflow_tools(mcp, client, audit, limiter, inspector)
+        tools = register_workflow_tools(mcp, client, audit, limiter, inspector, sanitizer)
         with pytest.raises(ValueError, match="Invalid JSON"):
             await tools["validate_workflow"](workflow="not json")
 
@@ -133,10 +160,10 @@ class TestValidateWorkflow:
 class TestIntegration:
     @respx.mock
     async def test_create_modify_validate_roundtrip(self, components):
-        client, audit, limiter, inspector = components
+        client, audit, limiter, inspector, sanitizer = components
         respx.get("http://test:8188/object_info").mock(side_effect=httpx.ConnectError("offline"))
         mcp = FastMCP("test")
-        tools = register_workflow_tools(mcp, client, audit, limiter, inspector)
+        tools = register_workflow_tools(mcp, client, audit, limiter, inspector, sanitizer)
 
         # Create
         created = await tools["create_workflow"](
