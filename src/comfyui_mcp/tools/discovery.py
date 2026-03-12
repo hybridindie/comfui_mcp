@@ -24,7 +24,6 @@ _MODEL_FAMILY_ALIASES = {
     "stable diffusion xl": "sdxl",
     "stable_diffusion_xl": "sdxl",
     "flux.1": "flux",
-    "sd3": "sd3",
     "sd3.5": "sd3",
     "stable-cascade": "cascade",
 }
