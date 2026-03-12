@@ -111,7 +111,7 @@ class TestModelManagerDetector:
             await detector.validate_folder("invalid_folder")
 
     @respx.mock
-    async def test_negative_cache_expires(self, client, monkeypatch):
+    async def test_negative_cache_expires(self, client):
         """After a failed probe, re-probes once the negative TTL expires."""
         route = respx.get("http://test:8188/model-manager/models")
 

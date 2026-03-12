@@ -229,10 +229,19 @@ class TestPathInjectionPrevention:
         with pytest.raises(ValueError, match="Invalid prompt_id"):
             await client.get_history_item("not-a-uuid")
 
+    @respx.mock
     async def test_prompt_id_valid_uuid_accepted(self, client):
-        # Should not raise ValueError (will fail on HTTP, but that's fine)
-        with pytest.raises(httpx.ConnectError):
-            await client.get_history_item("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        route = respx.get(
+            "http://test-comfyui:8188/history/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        ).mock(
+            return_value=httpx.Response(
+                200,
+                json={"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee": {"outputs": {}}},
+            )
+        )
+        result = await client.get_history_item("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        assert "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" in result
+        assert route.call_count == 1
 
     async def test_delete_queue_path_traversal_rejected(self, client):
         with pytest.raises(ValueError, match="Invalid prompt_id"):
