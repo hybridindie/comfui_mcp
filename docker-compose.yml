@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   comfyui-mcp:
     build: .
@@ -9,8 +7,8 @@ services:
       - COMFYUI_URL=${COMFYUI_URL:-http://comfyui:8188}
       - COMFYUI_SECURITY_MODE=${COMFYUI_SECURITY_MODE:-audit}
     volumes:
-      - ./config.yaml:/root/.comfyui-mcp/config.yaml:ro
-      - comfyui-mcp-data:/root/.comfyui-mcp/logs
+      - ./config.yaml:/home/app/.comfyui-mcp/config.yaml:ro
+      - comfyui-mcp-data:/home/app/.comfyui-mcp/logs
     restart: unless-stopped
 
 volumes:

@@ -279,6 +279,8 @@ transport:
     port: 8080
 ```
 
+> **SSE transport security warning:** The SSE transport has no built-in authentication. Binding to `0.0.0.0` or any non-localhost address exposes all MCP tools (workflow execution, file uploads, queue management) to any network client without authentication. Only enable SSE behind a reverse proxy (e.g., nginx, Caddy) that provides authentication and TLS. The server logs a warning at startup when SSE is bound to a non-localhost address.
+
 ### Environment variables
 
 Environment variables override config file values:
@@ -411,6 +413,15 @@ security:
 
 **Tip:** Use `audit_dangerous_nodes` to identify dangerous nodes, run workflows in audit mode to see which nodes you use, then switch to enforce mode with that allowlist.
 
+### Choosing a security mode
+
+| Mode | Behavior | Use case |
+|------|----------|----------|
+| `audit` (default) | Logs warnings about dangerous nodes but **allows** all workflows to execute | Development, initial setup, discovering which nodes your workflows use |
+| `enforce` | **Blocks** any workflow containing a node not on `allowed_nodes` | Production, shared environments, security-sensitive deployments |
+
+Start in `audit` mode, review your audit log to build an allowlist, then switch to `enforce` mode for production use.
+
 ## Audit log
 
 All tool invocations are logged as JSON lines to `~/.comfyui-mcp/audit.log`:
@@ -425,6 +436,24 @@ grep '"warnings":\[' ~/.comfyui-mcp/audit.log | grep -v '"warnings":\[\]'
 
 Sensitive fields (`token`, `password`, `secret`, `api_key`, `authorization`) are automatically redacted from log entries.
 
+### Log rotation
+
+The audit log grows indefinitely. Set up log rotation to prevent disk exhaustion:
+
+```bash
+# /etc/logrotate.d/comfyui-mcp
+/home/user/.comfyui-mcp/audit.log {
+    weekly
+    rotate 12
+    compress
+    missingok
+    notifempty
+    copytruncate
+}
+```
+
+Use `copytruncate` because the server holds the file open. Adjust the path to match your `logging.audit_file` setting.
+
 ## Security
 
 ### Threat model
@@ -435,7 +464,6 @@ Sensitive fields (`token`, `password`, `secret`, `api_key`, `authorization`) are
 | Path traversal via file operations | High | Path sanitizer blocks `..`, null bytes, encoded attacks, absolute paths |
 | Denial of service via request flooding | Medium | Token-bucket rate limiter per tool category |
 | Credential leakage in logs | Medium | Automatic redaction of `token`, `password`, `secret`, `api_key`, `authorization` |
-| Information disclosure via API | Low | Dangerous endpoints (`/userdata`, `/free`, `/system_stats`) never proxied |
 | Information disclosure via API | Low | Dangerous endpoints (`/userdata`, `/free`) never proxied; `/system_stats` whitelist-filtered by `get_system_info` |
 | MITM on ComfyUI connection | Medium | Configurable TLS verification |
 

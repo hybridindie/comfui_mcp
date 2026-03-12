@@ -220,6 +220,46 @@ class TestComfyUIClient:
         assert route.call_count == 1
 
 
+class TestPathInjectionPrevention:
+    async def test_prompt_id_path_traversal_rejected(self, client):
+        with pytest.raises(ValueError, match="Invalid prompt_id"):
+            await client.get_history_item("../../../free")
+
+    async def test_prompt_id_non_uuid_rejected(self, client):
+        with pytest.raises(ValueError, match="Invalid prompt_id"):
+            await client.get_history_item("not-a-uuid")
+
+    @respx.mock
+    async def test_prompt_id_valid_uuid_accepted(self, client):
+        route = respx.get(
+            "http://test-comfyui:8188/history/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        ).mock(
+            return_value=httpx.Response(
+                200,
+                json={"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee": {"outputs": {}}},
+            )
+        )
+        result = await client.get_history_item("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        assert "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" in result
+        assert route.call_count == 1
+
+    async def test_delete_queue_path_traversal_rejected(self, client):
+        with pytest.raises(ValueError, match="Invalid prompt_id"):
+            await client.delete_queue_item("../../free")
+
+    async def test_path_segment_traversal_rejected(self, client):
+        with pytest.raises(ValueError, match="invalid characters"):
+            await client.get_object_info("../../userdata")
+
+    async def test_path_segment_empty_rejected(self, client):
+        with pytest.raises(ValueError, match="must not be empty"):
+            await client.delete_download_task("")
+
+    async def test_http_method_injection_rejected(self, client):
+        with pytest.raises(ValueError, match="HTTP method not allowed"):
+            await client._request("CONNECT", "/queue")
+
+
 class TestModelManagerClient:
     @respx.mock
     async def test_get_model_manager_folders(self, client):
