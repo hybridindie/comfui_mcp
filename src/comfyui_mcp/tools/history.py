@@ -24,7 +24,7 @@ def register_history_tools(
     async def get_history() -> dict:
         """Browse ComfyUI execution history (read-only)."""
         limiter.check("get_history")
-        audit.log(tool="get_history", action="called")
+        await audit.async_log(tool="get_history", action="called")
         return await client.get_history()
 
     tool_fns["get_history"] = get_history

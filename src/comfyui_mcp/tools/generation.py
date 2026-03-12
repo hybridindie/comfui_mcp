@@ -316,7 +316,7 @@ def register_generation_tools(
                     raise WorkflowBlockedError(
                         f"Workflow blocked — missing models: {model_warnings}"
                     )
-        audit.log(
+        await audit.async_log(
             tool="run_workflow",
             action="inspected",
             nodes_used=inspection.nodes_used,
@@ -330,11 +330,11 @@ def register_generation_tools(
         ws_client_id = progress.client_id if wait and progress is not None else None
         response = await client.post_prompt(wf, client_id=ws_client_id)
         prompt_id = response.get("prompt_id", "unknown")
-        audit.log(tool="run_workflow", action="submitted", prompt_id=prompt_id)
+        await audit.async_log(tool="run_workflow", action="submitted", prompt_id=prompt_id)
 
         if wait and progress is not None:
             state = await progress.wait_for_completion(prompt_id)
-            audit.log(
+            await audit.async_log(
                 tool="run_workflow",
                 action="completed",
                 prompt_id=prompt_id,
@@ -394,7 +394,7 @@ def register_generation_tools(
                     raise WorkflowBlockedError(
                         f"Workflow blocked — missing models: {model_warnings}"
                     )
-        audit.log(
+        await audit.async_log(
             tool="generate_image",
             action="inspected",
             nodes_used=inspection.nodes_used,
@@ -407,11 +407,11 @@ def register_generation_tools(
         ws_client_id = progress.client_id if wait and progress is not None else None
         response = await client.post_prompt(wf, client_id=ws_client_id)
         prompt_id = response.get("prompt_id", "unknown")
-        audit.log(tool="generate_image", action="submitted", prompt_id=prompt_id)
+        await audit.async_log(tool="generate_image", action="submitted", prompt_id=prompt_id)
 
         if wait and progress is not None:
             state = await progress.wait_for_completion(prompt_id)
-            audit.log(
+            await audit.async_log(
                 tool="generate_image",
                 action="completed",
                 prompt_id=prompt_id,
@@ -460,7 +460,7 @@ def register_generation_tools(
             object_info = await client.get_object_info()
 
         analysis = _analyze_workflow(wf, object_info)
-        audit.log(
+        await audit.async_log(
             tool="summarize_workflow",
             action="summarized",
             extra={
@@ -523,7 +523,7 @@ def register_generation_tools(
 
         wf = _create_from_template("img2img", params)
         inspection = inspector.inspect(wf)
-        audit.log(
+        await audit.async_log(
             tool="transform_image",
             action="inspected",
             nodes_used=inspection.nodes_used,
@@ -535,11 +535,11 @@ def register_generation_tools(
         ws_client_id = progress.client_id if wait and progress is not None else None
         response = await client.post_prompt(wf, client_id=ws_client_id)
         prompt_id = response.get("prompt_id", "unknown")
-        audit.log(tool="transform_image", action="submitted", prompt_id=prompt_id)
+        await audit.async_log(tool="transform_image", action="submitted", prompt_id=prompt_id)
 
         if wait and progress is not None:
             state = await progress.wait_for_completion(prompt_id)
-            audit.log(
+            await audit.async_log(
                 tool="transform_image",
                 action="completed",
                 prompt_id=prompt_id,
@@ -607,7 +607,7 @@ def register_generation_tools(
 
         wf = _create_from_template("inpaint", params)
         inspection = inspector.inspect(wf)
-        audit.log(
+        await audit.async_log(
             tool="inpaint_image",
             action="inspected",
             nodes_used=inspection.nodes_used,
@@ -619,11 +619,11 @@ def register_generation_tools(
         ws_client_id = progress.client_id if wait and progress is not None else None
         response = await client.post_prompt(wf, client_id=ws_client_id)
         prompt_id = response.get("prompt_id", "unknown")
-        audit.log(tool="inpaint_image", action="submitted", prompt_id=prompt_id)
+        await audit.async_log(tool="inpaint_image", action="submitted", prompt_id=prompt_id)
 
         if wait and progress is not None:
             state = await progress.wait_for_completion(prompt_id)
-            audit.log(
+            await audit.async_log(
                 tool="inpaint_image",
                 action="completed",
                 prompt_id=prompt_id,
@@ -660,7 +660,7 @@ def register_generation_tools(
 
         wf = _create_from_template("upscale", {"image": clean_image, "model_name": upscale_model})
         inspection = inspector.inspect(wf)
-        audit.log(
+        await audit.async_log(
             tool="upscale_image",
             action="inspected",
             nodes_used=inspection.nodes_used,
@@ -672,11 +672,11 @@ def register_generation_tools(
         ws_client_id = progress.client_id if wait and progress is not None else None
         response = await client.post_prompt(wf, client_id=ws_client_id)
         prompt_id = response.get("prompt_id", "unknown")
-        audit.log(tool="upscale_image", action="submitted", prompt_id=prompt_id)
+        await audit.async_log(tool="upscale_image", action="submitted", prompt_id=prompt_id)
 
         if wait and progress is not None:
             state = await progress.wait_for_completion(prompt_id)
-            audit.log(
+            await audit.async_log(
                 tool="upscale_image",
                 action="completed",
                 prompt_id=prompt_id,

@@ -83,7 +83,7 @@ def register_workflow_tools(
             raise ValueError(str(e)) from e
 
         wf = create_from_template(template, clean_params)
-        audit.log(
+        await audit.async_log(
             tool="create_workflow",
             action="created",
             extra={"template": template, "node_count": len(wf)},
@@ -125,7 +125,7 @@ def register_workflow_tools(
             raise ValueError("Operations must be a JSON array of operation objects")
 
         result = apply_operations(wf, ops)
-        audit.log(
+        await audit.async_log(
             tool="modify_workflow",
             action="modified",
             extra={"operations": len(ops), "node_count": len(result)},
@@ -158,7 +158,7 @@ def register_workflow_tools(
             raise ValueError("Workflow must be a JSON object keyed by node IDs")
 
         result = await _validate_workflow(wf, client, inspector)
-        audit.log(
+        await audit.async_log(
             tool="validate_workflow",
             action="validated",
             extra={

@@ -159,7 +159,7 @@ def register_discovery_tools(
         """List available models in a folder (checkpoints, loras, vae, etc.)."""
         limiter.check("list_models")
         sanitizer.validate_path_segment(folder, label="folder")
-        audit.log(tool="list_models", action="called", extra={"folder": folder})
+        await audit.async_log(tool="list_models", action="called", extra={"folder": folder})
         return await client.get_models(folder)
 
     tool_fns["list_models"] = list_models
@@ -168,7 +168,7 @@ def register_discovery_tools(
     async def list_nodes() -> list[str]:
         """List all available ComfyUI node types."""
         limiter.check("list_nodes")
-        audit.log(tool="list_nodes", action="called")
+        await audit.async_log(tool="list_nodes", action="called")
         info = await client.get_object_info()
         return sorted(info.keys())
 
@@ -178,7 +178,9 @@ def register_discovery_tools(
     async def get_node_info(node_class: str) -> dict:
         """Get detailed information about a specific node type."""
         limiter.check("get_node_info")
-        audit.log(tool="get_node_info", action="called", extra={"node_class": node_class})
+        await audit.async_log(
+            tool="get_node_info", action="called", extra={"node_class": node_class}
+        )
         return await client.get_object_info(node_class)
 
     tool_fns["get_node_info"] = get_node_info
@@ -187,7 +189,7 @@ def register_discovery_tools(
     async def list_workflows() -> list:
         """List available workflow templates."""
         limiter.check("list_workflows")
-        audit.log(tool="list_workflows", action="called")
+        await audit.async_log(tool="list_workflows", action="called")
         return await client.get_workflow_templates()
 
     tool_fns["list_workflows"] = list_workflows
@@ -196,7 +198,7 @@ def register_discovery_tools(
     async def list_extensions() -> list:
         """List available ComfyUI extensions."""
         limiter.check("list_extensions")
-        audit.log(tool="list_extensions", action="called")
+        await audit.async_log(tool="list_extensions", action="called")
         return await client.get_extensions()
 
     tool_fns["list_extensions"] = list_extensions
@@ -205,7 +207,7 @@ def register_discovery_tools(
     async def get_server_features() -> dict:
         """Get ComfyUI server features and capabilities."""
         limiter.check("get_server_features")
-        audit.log(tool="get_server_features", action="called")
+        await audit.async_log(tool="get_server_features", action="called")
         return await client.get_features()
 
     tool_fns["get_server_features"] = get_server_features
@@ -214,7 +216,7 @@ def register_discovery_tools(
     async def list_model_folders() -> list[str]:
         """List available model folder types (checkpoints, loras, vae, etc.)."""
         limiter.check("list_model_folders")
-        audit.log(tool="list_model_folders", action="called")
+        await audit.async_log(tool="list_model_folders", action="called")
         return await client.get_model_types()
 
     tool_fns["list_model_folders"] = list_model_folders
@@ -230,7 +232,7 @@ def register_discovery_tools(
         limiter.check("get_model_metadata")
         sanitizer.validate_path_segment(folder, label="folder")
         sanitizer.validate_path_segment(filename, label="filename")
-        audit.log(
+        await audit.async_log(
             tool="get_model_metadata",
             action="called",
             extra={"folder": folder, "filename": filename},
@@ -250,7 +252,7 @@ def register_discovery_tools(
             Dictionary with dangerous and suspicious node counts and lists
         """
         limiter.check("audit_dangerous_nodes")
-        audit.log(tool="audit_dangerous_nodes", action="started")
+        await audit.async_log(tool="audit_dangerous_nodes", action="started")
 
         auditor = node_auditor if node_auditor else NodeAuditor()
 
@@ -273,7 +275,7 @@ def register_discovery_tools(
             },
         }
 
-        audit.log(
+        await audit.async_log(
             tool="audit_dangerous_nodes",
             action="completed",
             extra={
@@ -300,7 +302,7 @@ def register_discovery_tools(
             queue (running/pending counts).
         """
         limiter.check("get_system_info")
-        audit.log(tool="get_system_info", action="called")
+        await audit.async_log(tool="get_system_info", action="called")
 
         raw = await client.get_system_stats()
         queue_raw = await client.get_queue()
@@ -353,7 +355,7 @@ def register_discovery_tools(
             Dictionary containing normalized family and recommended settings.
         """
         limiter.check("get_model_presets")
-        audit.log(
+        await audit.async_log(
             tool="get_model_presets",
             action="called",
             extra={"model_name": model_name, "model_family": model_family},
@@ -389,7 +391,7 @@ def register_discovery_tools(
         """
         limiter.check("get_prompting_guide")
         normalized = _normalize_model_family(model_family)
-        audit.log(
+        await audit.async_log(
             tool="get_prompting_guide",
             action="called",
             extra={"model_family": normalized},

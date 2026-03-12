@@ -103,13 +103,13 @@ def register_file_tools(
         clean_subfolder = sanitizer.validate_subfolder(subfolder)
         raw = base64.b64decode(image_data)
         sanitizer.validate_size(len(raw))
-        audit.log(
+        await audit.async_log(
             tool="upload_image",
             action="uploading",
             extra={"filename": clean_name, "size_bytes": len(raw)},
         )
         result = await client.upload_image(raw, clean_name, clean_subfolder)
-        audit.log(tool="upload_image", action="uploaded", extra={"result": result})
+        await audit.async_log(tool="upload_image", action="uploaded", extra={"result": result})
         return f"Uploaded {result.get('name', clean_name)} to ComfyUI input directory"
 
     tool_fns["upload_image"] = upload_image
@@ -128,7 +128,9 @@ def register_file_tools(
         limiter.check("get_image")
         clean_name = sanitizer.validate_filename(filename)
         clean_subfolder = sanitizer.validate_subfolder(subfolder)
-        audit.log(tool="get_image", action="downloading", extra={"filename": clean_name})
+        await audit.async_log(
+            tool="get_image", action="downloading", extra={"filename": clean_name}
+        )
         data, content_type = await client.get_image(clean_name, clean_subfolder)
         b64 = base64.b64encode(data).decode()
         return f"data:{content_type};base64,{b64}"
@@ -139,7 +141,7 @@ def register_file_tools(
     async def list_outputs() -> list[str]:
         """List files in ComfyUI's output directory."""
         limiter.check("list_outputs")
-        audit.log(tool="list_outputs", action="called")
+        await audit.async_log(tool="list_outputs", action="called")
         history = await client.get_history()
         filenames = set()
         for entry in history.values():
@@ -167,13 +169,13 @@ def register_file_tools(
         clean_subfolder = sanitizer.validate_subfolder(subfolder)
         raw = base64.b64decode(mask_data)
         sanitizer.validate_size(len(raw))
-        audit.log(
+        await audit.async_log(
             tool="upload_mask",
             action="uploading",
             extra={"filename": clean_name, "size_bytes": len(raw)},
         )
         result = await client.upload_mask(raw, clean_name, clean_subfolder)
-        audit.log(tool="upload_mask", action="uploaded", extra={"result": result})
+        await audit.async_log(tool="upload_mask", action="uploaded", extra={"result": result})
         return f"Uploaded mask {result.get('name', clean_name)} to ComfyUI input directory"
 
     tool_fns["upload_mask"] = upload_mask
@@ -197,7 +199,7 @@ def register_file_tools(
         limiter.check("get_workflow_from_image")
         clean_name = sanitizer.validate_filename(filename)
         clean_subfolder = sanitizer.validate_subfolder(subfolder)
-        audit.log(
+        await audit.async_log(
             tool="get_workflow_from_image",
             action="extracting",
             extra={"filename": clean_name, "subfolder": clean_subfolder},
@@ -235,7 +237,7 @@ def register_file_tools(
         else:
             message = "No workflow metadata found in this image"
 
-        audit.log(
+        await audit.async_log(
             tool="get_workflow_from_image",
             action="extracted",
             extra={

@@ -188,7 +188,7 @@ def register_model_tools(
 
         cap = max(1, min(limit, search_settings.max_search_results))
 
-        audit.log(
+        await audit.async_log(
             tool="search_models",
             action="searching",
             extra={"query": stripped_query, "source": source, "model_type": model_type},
@@ -203,7 +203,7 @@ def register_model_tools(
                 stripped_query, model_type, cap, search_settings.huggingface_token, search_http
             )
 
-        audit.log(
+        await audit.async_log(
             tool="search_models",
             action="searched",
             extra={"source": source, "result_count": len(results)},
@@ -258,7 +258,7 @@ def register_model_tools(
         else:
             platform = "other"
 
-        audit.log(
+        await audit.async_log(
             tool="download_model",
             action="downloading",
             extra={"url": url, "folder": folder, "filename": filename, "platform": platform},
@@ -273,7 +273,7 @@ def register_model_tools(
             size_bytes=0,
         )
 
-        audit.log(
+        await audit.async_log(
             tool="download_model",
             action="download_started",
             extra={"result": result, "folder": folder, "filename": filename},
@@ -293,11 +293,11 @@ def register_model_tools(
         read_limiter.check("get_download_tasks")
         await detector.get_folders()  # Ensure Model Manager is available
 
-        audit.log(tool="get_download_tasks", action="checking")
+        await audit.async_log(tool="get_download_tasks", action="checking")
 
         tasks = await client.get_download_tasks()
 
-        audit.log(
+        await audit.async_log(
             tool="get_download_tasks",
             action="checked",
             extra={"task_count": len(tasks)},
@@ -317,7 +317,7 @@ def register_model_tools(
         file_limiter.check("cancel_download")
         await detector.get_folders()  # Ensure Model Manager is available
 
-        audit.log(
+        await audit.async_log(
             tool="cancel_download",
             action="cancelling",
             extra={"task_id": task_id},
@@ -327,7 +327,7 @@ def register_model_tools(
 
         success = bool(result.get("success", True)) if isinstance(result, dict) else True
 
-        audit.log(
+        await audit.async_log(
             tool="cancel_download",
             action="cancelled",
             extra={"task_id": task_id, "result": result, "success": success},
