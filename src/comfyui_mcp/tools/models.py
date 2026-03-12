@@ -23,6 +23,10 @@ _CIVITAI_API = "https://civitai.com/api/v1/models"
 # Extensions we look for when finding the primary model file in HuggingFace repos
 _MODEL_EXTENSIONS = {".safetensors", ".ckpt", ".pt", ".pth", ".bin"}
 
+# Input validation limits for external API queries
+_MAX_QUERY_LENGTH = 200
+_MAX_MODEL_TYPE_LENGTH = 50
+
 
 async def _search_civitai(
     query: str,
@@ -172,6 +176,15 @@ def register_model_tools(
 
         if source not in ("civitai", "huggingface"):
             raise ValueError("source must be 'civitai' or 'huggingface'")
+
+        if not query or not query.strip():
+            raise ValueError("query must not be empty")
+        if len(query) > _MAX_QUERY_LENGTH:
+            raise ValueError(f"query too long ({len(query)} chars, max {_MAX_QUERY_LENGTH})")
+        if model_type and len(model_type) > _MAX_MODEL_TYPE_LENGTH:
+            raise ValueError(
+                f"model_type too long ({len(model_type)} chars, max {_MAX_MODEL_TYPE_LENGTH})"
+            )
 
         cap = max(1, min(limit, search_settings.max_search_results))
 

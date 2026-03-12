@@ -1,6 +1,9 @@
 """Tests for structured audit logging."""
 
 import json
+import os
+
+import pytest
 
 from comfyui_mcp.audit import AuditLogger, AuditRecord
 
@@ -81,3 +84,22 @@ class TestAuditLogger:
         content = log_file.read_text()
         assert "secret-value" not in content
         assert "a cat" in content
+
+    def test_log_raises_on_write_failure(self, tmp_path):
+        log_file = tmp_path / "readonly" / "audit.log"
+        (tmp_path / "readonly").mkdir()
+        (tmp_path / "readonly").chmod(0o444)
+        logger = AuditLogger(audit_file=log_file)
+        with pytest.raises(OSError):
+            logger.log(tool="test", action="called")
+        # Restore permissions for cleanup
+        (tmp_path / "readonly").chmod(0o755)
+
+    def test_log_rejects_symlinked_path(self, tmp_path):
+        real_file = tmp_path / "real.log"
+        real_file.touch()
+        link = tmp_path / "audit.log"
+        os.symlink(real_file, link)
+        logger = AuditLogger(audit_file=link)
+        with pytest.raises(OSError, match="symlink"):
+            logger.log(tool="test", action="called")

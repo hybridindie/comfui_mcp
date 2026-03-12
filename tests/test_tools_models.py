@@ -134,6 +134,24 @@ class TestSearchModels:
         with pytest.raises(ValueError, match="source must be"):
             await registered_tools["search_models"](query="test", source="invalid")
 
+    async def test_search_empty_query_rejected(self, registered_tools):
+        with pytest.raises(ValueError, match="must not be empty"):
+            await registered_tools["search_models"](query="", source="civitai")
+
+    async def test_search_whitespace_query_rejected(self, registered_tools):
+        with pytest.raises(ValueError, match="must not be empty"):
+            await registered_tools["search_models"](query="   ", source="civitai")
+
+    async def test_search_query_too_long_rejected(self, registered_tools):
+        with pytest.raises(ValueError, match="query too long"):
+            await registered_tools["search_models"](query="x" * 201, source="civitai")
+
+    async def test_search_model_type_too_long_rejected(self, registered_tools):
+        with pytest.raises(ValueError, match="model_type too long"):
+            await registered_tools["search_models"](
+                query="test", source="civitai", model_type="x" * 51
+            )
+
     @respx.mock
     async def test_search_with_api_key(self, components):
         components["search_settings"] = ModelSearchSettings(civitai_api_key="test_key")
