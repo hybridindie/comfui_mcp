@@ -1,11 +1,13 @@
-"""Generation tools: generate_image, run_workflow, summarize_workflow."""
+"""Generation tools: image generation, workflow execution, and summarization."""
 
 from __future__ import annotations
 
 import contextlib
 import copy
 import json
+from pathlib import PurePosixPath
 from typing import Any
+from urllib.parse import unquote
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -16,6 +18,8 @@ from comfyui_mcp.progress import WebSocketProgress
 from comfyui_mcp.security.inspector import WorkflowBlockedError, WorkflowInspector
 from comfyui_mcp.security.model_checker import ModelChecker
 from comfyui_mcp.security.rate_limit import RateLimiter
+from comfyui_mcp.security.sanitizer import PathSanitizer
+from comfyui_mcp.workflow.templates import create_from_template as _create_from_template
 from comfyui_mcp.workflow.validation import INPUT_NODE_TYPES as _INPUT_NODE_TYPES
 from comfyui_mcp.workflow.validation import SAMPLER_NODE_TYPES as _SAMPLER_NODE_TYPES
 from comfyui_mcp.workflow.validation import WorkflowAnalysis
@@ -24,6 +28,25 @@ from comfyui_mcp.workflow.validation import analyze_workflow as _analyze_workflo
 MAX_WIDTH = 4096
 MAX_HEIGHT = 4096
 MIN_DIMENSION = 64
+
+
+def _validate_image_filename(filename: str, sanitizer: PathSanitizer | None) -> str:
+    """Validate an image filename for use in workflow tools.
+
+    Delegates to PathSanitizer when one is provided; otherwise applies minimal
+    inline checks to block null bytes, absolute paths, and path traversal.
+    """
+    if sanitizer is not None:
+        return sanitizer.validate_filename(filename)
+    decoded = unquote(filename)
+    if "\x00" in decoded:
+        raise ValueError(f"Filename contains null byte: {filename!r}")
+    norm = decoded.replace("\\\\", "/")
+    if norm.startswith("/"):
+        raise ValueError(f"Filename is an absolute path: {filename!r}")
+    if ".." in PurePosixPath(norm).parts:
+        raise ValueError(f"Filename contains path traversal: {filename!r}")
+    return norm
 
 
 def _format_warnings(warnings: list[str]) -> str:
@@ -251,6 +274,7 @@ def register_generation_tools(
     read_limiter: RateLimiter | None = None,
     progress: WebSocketProgress | None = None,
     model_checker: ModelChecker | None = None,
+    sanitizer: PathSanitizer | None = None,
 ) -> dict[str, Any]:
     """Register generation tools."""
     tool_fns: dict[str, Any] = {}
@@ -440,5 +464,221 @@ def register_generation_tools(
         return _format_summary(analysis)
 
     tool_fns["summarize_workflow"] = summarize_workflow
+
+    @mcp.tool()
+    async def transform_image(
+        image: str,
+        prompt: str,
+        negative_prompt: str = "bad quality, blurry",
+        strength: float = 0.75,
+        steps: int = 20,
+        cfg: float = 7.0,
+        model: str = "",
+        wait: bool = False,
+    ) -> str:
+        """Transform an existing image using a text prompt (img2img).
+
+        The input image must already be uploaded to ComfyUI via upload_image.
+
+        Args:
+            image: Filename of the input image in ComfyUI's input directory
+            prompt: Text description guiding the transformation
+            negative_prompt: What to avoid in the output image
+            strength: How much to deviate from the input (0.0 = identical, 1.0 = fully reimagined)
+            steps: Number of sampling steps (1-100)
+            cfg: Classifier-free guidance scale (1.0-30.0)
+            model: Checkpoint model name (leave empty for default)
+            wait: If True, block until complete and return structured result with outputs
+        """
+        if not 0.0 <= strength <= 1.0:
+            raise ValueError("strength must be between 0.0 and 1.0")
+        if steps < 1 or steps > 100:
+            raise ValueError("steps must be between 1 and 100")
+        if cfg < 1.0 or cfg > 30.0:
+            raise ValueError("cfg must be between 1.0 and 30.0")
+
+        limiter.check("transform_image")
+        clean_image = _validate_image_filename(image, sanitizer)
+
+        params: dict[str, Any] = {
+            "image": clean_image,
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "denoise": strength,
+            "steps": steps,
+            "cfg": cfg,
+        }
+        if model:
+            params["model"] = model
+
+        wf = _create_from_template("img2img", params)
+        inspection = inspector.inspect(wf)
+        audit.log(
+            tool="transform_image",
+            action="inspected",
+            nodes_used=inspection.nodes_used,
+            warnings=inspection.warnings,
+            extra={"image": clean_image, "prompt": prompt, "strength": strength},
+        )
+
+        warning_msg = _format_warnings(inspection.warnings)
+        ws_client_id = progress.client_id if wait and progress is not None else None
+        response = await client.post_prompt(wf, client_id=ws_client_id)
+        prompt_id = response.get("prompt_id", "unknown")
+        audit.log(tool="transform_image", action="submitted", prompt_id=prompt_id)
+
+        if wait and progress is not None:
+            state = await progress.wait_for_completion(prompt_id)
+            audit.log(
+                tool="transform_image",
+                action="completed",
+                prompt_id=prompt_id,
+                extra={"status": state.status, "elapsed": state.elapsed_seconds},
+            )
+            result_dict = state.to_dict()
+            if inspection.warnings:
+                result_dict["warnings"] = inspection.warnings
+            return json.dumps(result_dict)
+
+        return f"Image transformation started. prompt_id: {prompt_id}{warning_msg}"
+
+    tool_fns["transform_image"] = transform_image
+
+    @mcp.tool()
+    async def inpaint_image(
+        image: str,
+        mask: str,
+        prompt: str,
+        negative_prompt: str = "bad quality, blurry",
+        strength: float = 0.8,
+        steps: int = 20,
+        cfg: float = 7.0,
+        model: str = "",
+        wait: bool = False,
+    ) -> str:
+        """Inpaint regions of an image using a mask and text prompt.
+
+        Both the input image and mask must already be uploaded via upload_image/upload_mask.
+        White regions in the mask indicate areas to regenerate.
+
+        Args:
+            image: Filename of the input image in ComfyUI's input directory
+            mask: Filename of the mask image (white = inpaint, black = keep)
+            prompt: Text description for the inpainted region
+            negative_prompt: What to avoid in the inpainted region
+            strength: Inpainting strength (0.0 = keep original, 1.0 = fully regenerate)
+            steps: Number of sampling steps (1-100)
+            cfg: Classifier-free guidance scale (1.0-30.0)
+            model: Checkpoint model name (leave empty for default)
+            wait: If True, block until complete and return structured result with outputs
+        """
+        if not 0.0 <= strength <= 1.0:
+            raise ValueError("strength must be between 0.0 and 1.0")
+        if steps < 1 or steps > 100:
+            raise ValueError("steps must be between 1 and 100")
+        if cfg < 1.0 or cfg > 30.0:
+            raise ValueError("cfg must be between 1.0 and 30.0")
+
+        limiter.check("inpaint_image")
+        clean_image = _validate_image_filename(image, sanitizer)
+        clean_mask = _validate_image_filename(mask, sanitizer)
+
+        params: dict[str, Any] = {
+            "image": clean_image,
+            "mask": clean_mask,
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "denoise": strength,
+            "steps": steps,
+            "cfg": cfg,
+        }
+        if model:
+            params["model"] = model
+
+        wf = _create_from_template("inpaint", params)
+        inspection = inspector.inspect(wf)
+        audit.log(
+            tool="inpaint_image",
+            action="inspected",
+            nodes_used=inspection.nodes_used,
+            warnings=inspection.warnings,
+            extra={"image": clean_image, "mask": clean_mask, "prompt": prompt},
+        )
+
+        warning_msg = _format_warnings(inspection.warnings)
+        ws_client_id = progress.client_id if wait and progress is not None else None
+        response = await client.post_prompt(wf, client_id=ws_client_id)
+        prompt_id = response.get("prompt_id", "unknown")
+        audit.log(tool="inpaint_image", action="submitted", prompt_id=prompt_id)
+
+        if wait and progress is not None:
+            state = await progress.wait_for_completion(prompt_id)
+            audit.log(
+                tool="inpaint_image",
+                action="completed",
+                prompt_id=prompt_id,
+                extra={"status": state.status, "elapsed": state.elapsed_seconds},
+            )
+            result_dict = state.to_dict()
+            if inspection.warnings:
+                result_dict["warnings"] = inspection.warnings
+            return json.dumps(result_dict)
+
+        return f"Inpainting started. prompt_id: {prompt_id}{warning_msg}"
+
+    tool_fns["inpaint_image"] = inpaint_image
+
+    @mcp.tool()
+    async def upscale_image(
+        image: str,
+        upscale_model: str = "RealESRGAN_x4plus.pth",
+        wait: bool = False,
+    ) -> str:
+        """Upscale an image using a model-based upscaler.
+
+        The input image must already be uploaded to ComfyUI via upload_image.
+        The scale factor is determined by the upscale model (e.g. RealESRGAN_x4plus = 4x).
+
+        Args:
+            image: Filename of the input image in ComfyUI's input directory
+            upscale_model: Name of the upscale model file (default: RealESRGAN_x4plus.pth).
+                           Use list_models with folder='upscale_models' to see available models.
+            wait: If True, block until complete and return structured result with outputs
+        """
+        limiter.check("upscale_image")
+        clean_image = _validate_image_filename(image, sanitizer)
+
+        wf = _create_from_template("upscale", {"image": clean_image, "model_name": upscale_model})
+        inspection = inspector.inspect(wf)
+        audit.log(
+            tool="upscale_image",
+            action="inspected",
+            nodes_used=inspection.nodes_used,
+            warnings=inspection.warnings,
+            extra={"image": clean_image, "upscale_model": upscale_model},
+        )
+
+        warning_msg = _format_warnings(inspection.warnings)
+        ws_client_id = progress.client_id if wait and progress is not None else None
+        response = await client.post_prompt(wf, client_id=ws_client_id)
+        prompt_id = response.get("prompt_id", "unknown")
+        audit.log(tool="upscale_image", action="submitted", prompt_id=prompt_id)
+
+        if wait and progress is not None:
+            state = await progress.wait_for_completion(prompt_id)
+            audit.log(
+                tool="upscale_image",
+                action="completed",
+                prompt_id=prompt_id,
+                extra={"status": state.status, "elapsed": state.elapsed_seconds},
+            )
+            result_dict = state.to_dict()
+            if inspection.warnings:
+                result_dict["warnings"] = inspection.warnings
+            return json.dumps(result_dict)
+
+        return f"Upscaling started. prompt_id: {prompt_id}{warning_msg}"
+
+    tool_fns["upscale_image"] = upscale_image
 
     return tool_fns

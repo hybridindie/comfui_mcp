@@ -14,6 +14,7 @@ from comfyui_mcp.progress import WebSocketProgress
 from comfyui_mcp.security.inspector import WorkflowBlockedError, WorkflowInspector
 from comfyui_mcp.security.model_checker import ModelChecker
 from comfyui_mcp.security.rate_limit import RateLimiter
+from comfyui_mcp.security.sanitizer import PathValidationError
 from comfyui_mcp.tools.generation import (
     _format_summary,
     register_generation_tools,
@@ -906,3 +907,259 @@ class TestModelCheckIntegration:
         result = await tools["run_workflow"](workflow=workflow)
         assert "pass-123" in result
         assert "Missing model" not in result
+
+
+class TestConvenienceTools:
+    """Tests for transform_image, inpaint_image, and upscale_image."""
+
+    @pytest.fixture
+    def gen_components(self, tmp_path):
+        from comfyui_mcp.security.sanitizer import PathSanitizer
+
+        client = ComfyUIClient(base_url="http://test:8188")
+        audit = AuditLogger(audit_file=tmp_path / "audit.log")
+        limiter = RateLimiter(max_per_minute=60)
+        inspector = WorkflowInspector(mode="audit", dangerous_nodes=[], allowed_nodes=[])
+        sanitizer = PathSanitizer(allowed_extensions=[".png", ".jpg", ".webp", ".pth"])
+        return client, audit, limiter, inspector, sanitizer
+
+    # --- transform_image ---
+
+    @respx.mock
+    async def test_transform_image_submits_workflow(self, gen_components):
+        client, audit, limiter, inspector, sanitizer = gen_components
+        respx.post("http://test:8188/prompt").mock(
+            return_value=httpx.Response(200, json={"prompt_id": "t2i-001"})
+        )
+        mcp = FastMCP("test")
+        tools = register_generation_tools(
+            mcp, client, audit, limiter, inspector, sanitizer=sanitizer
+        )
+        result = await tools["transform_image"](image="input.png", prompt="a cat in a hat")
+        assert "t2i-001" in result
+
+    @respx.mock
+    async def test_transform_image_puts_prompt_in_workflow(self, gen_components):
+        client, audit, limiter, inspector, sanitizer = gen_components
+        captured: dict = {}
+
+        async def capture(data, **_kwargs):
+            captured["workflow"] = data
+            return {"prompt_id": "cap-001"}
+
+        import unittest.mock
+
+        mcp = FastMCP("test")
+        tools = register_generation_tools(
+            mcp, client, audit, limiter, inspector, sanitizer=sanitizer
+        )
+        with unittest.mock.patch.object(client, "post_prompt", side_effect=capture):
+            await tools["transform_image"](
+                image="input.png", prompt="my custom prompt", strength=0.5
+            )
+
+        wf = captured["workflow"]
+        clip_nodes = [n for n in wf.values() if n["class_type"] == "CLIPTextEncode"]
+        prompts = [n["inputs"]["text"] for n in clip_nodes]
+        assert "my custom prompt" in prompts
+        ksampler = next(n for n in wf.values() if n["class_type"] == "KSampler")
+        assert ksampler["inputs"]["denoise"] == 0.5
+
+    async def test_transform_image_rejects_invalid_strength(self, gen_components):
+        client, audit, limiter, inspector, sanitizer = gen_components
+        mcp = FastMCP("test")
+        tools = register_generation_tools(
+            mcp, client, audit, limiter, inspector, sanitizer=sanitizer
+        )
+        with pytest.raises(ValueError, match="strength"):
+            await tools["transform_image"](image="x.png", prompt="p", strength=1.5)
+
+    async def test_transform_image_rejects_path_traversal(self, gen_components):
+        client, audit, limiter, inspector, sanitizer = gen_components
+        mcp = FastMCP("test")
+        tools = register_generation_tools(
+            mcp, client, audit, limiter, inspector, sanitizer=sanitizer
+        )
+        with pytest.raises(PathValidationError, match="traversal"):
+            await tools["transform_image"](image="../evil.png", prompt="p")
+
+    @respx.mock
+    async def test_transform_image_audit_log_written(self, gen_components):
+        client, audit, limiter, inspector, sanitizer = gen_components
+        respx.post("http://test:8188/prompt").mock(
+            return_value=httpx.Response(200, json={"prompt_id": "audit-t"})
+        )
+        mcp = FastMCP("test")
+        tools = register_generation_tools(
+            mcp, client, audit, limiter, inspector, sanitizer=sanitizer
+        )
+        await tools["transform_image"](image="ref.png", prompt="a landscape")
+        lines = audit._audit_file.read_text().strip().split("\n")
+        entries = [json.loads(line) for line in lines]
+        assert any(e["tool"] == "transform_image" and e["action"] == "submitted" for e in entries)
+
+    # --- inpaint_image ---
+
+    @respx.mock
+    async def test_inpaint_image_submits_workflow(self, gen_components):
+        client, audit, limiter, inspector, sanitizer = gen_components
+        respx.post("http://test:8188/prompt").mock(
+            return_value=httpx.Response(200, json={"prompt_id": "inp-001"})
+        )
+        mcp = FastMCP("test")
+        tools = register_generation_tools(
+            mcp, client, audit, limiter, inspector, sanitizer=sanitizer
+        )
+        result = await tools["inpaint_image"](
+            image="scene.png", mask="mask.png", prompt="a blue sky"
+        )
+        assert "inp-001" in result
+
+    @respx.mock
+    async def test_inpaint_image_uses_both_filenames(self, gen_components):
+        client, audit, limiter, inspector, sanitizer = gen_components
+        captured: dict = {}
+
+        async def capture(data, **_kwargs):
+            captured["workflow"] = data
+            return {"prompt_id": "cap-002"}
+
+        import unittest.mock
+
+        mcp = FastMCP("test")
+        tools = register_generation_tools(
+            mcp, client, audit, limiter, inspector, sanitizer=sanitizer
+        )
+        with unittest.mock.patch.object(client, "post_prompt", side_effect=capture):
+            await tools["inpaint_image"](image="scene.png", mask="mask.png", prompt="a tree")
+
+        wf = captured["workflow"]
+        load_image = next(n for n in wf.values() if n["class_type"] == "LoadImage")
+        load_mask = next(n for n in wf.values() if n["class_type"] == "LoadImageMask")
+        assert load_image["inputs"]["image"] == "scene.png"
+        assert load_mask["inputs"]["image"] == "mask.png"
+
+    async def test_inpaint_image_rejects_mask_traversal(self, gen_components):
+        client, audit, limiter, inspector, sanitizer = gen_components
+        mcp = FastMCP("test")
+        tools = register_generation_tools(
+            mcp, client, audit, limiter, inspector, sanitizer=sanitizer
+        )
+        with pytest.raises(PathValidationError, match="traversal"):
+            await tools["inpaint_image"](image="ok.png", mask="../../etc/passwd", prompt="p")
+
+    async def test_inpaint_image_rejects_invalid_steps(self, gen_components):
+        client, audit, limiter, inspector, sanitizer = gen_components
+        mcp = FastMCP("test")
+        tools = register_generation_tools(
+            mcp, client, audit, limiter, inspector, sanitizer=sanitizer
+        )
+        with pytest.raises(ValueError, match="steps"):
+            await tools["inpaint_image"](image="x.png", mask="m.png", prompt="p", steps=0)
+
+    # --- upscale_image ---
+
+    @respx.mock
+    async def test_upscale_image_submits_workflow(self, gen_components):
+        client, audit, limiter, inspector, sanitizer = gen_components
+        respx.post("http://test:8188/prompt").mock(
+            return_value=httpx.Response(200, json={"prompt_id": "up-001"})
+        )
+        mcp = FastMCP("test")
+        tools = register_generation_tools(
+            mcp, client, audit, limiter, inspector, sanitizer=sanitizer
+        )
+        result = await tools["upscale_image"](image="small.png")
+        assert "up-001" in result
+
+    @respx.mock
+    async def test_upscale_image_uses_custom_model(self, gen_components):
+        client, audit, limiter, inspector, sanitizer = gen_components
+        captured: dict = {}
+
+        async def capture(data, **_kwargs):
+            captured["workflow"] = data
+            return {"prompt_id": "cap-003"}
+
+        import unittest.mock
+
+        mcp = FastMCP("test")
+        tools = register_generation_tools(
+            mcp, client, audit, limiter, inspector, sanitizer=sanitizer
+        )
+        with unittest.mock.patch.object(client, "post_prompt", side_effect=capture):
+            await tools["upscale_image"](image="photo.png", upscale_model="4x-UltraSharp.pth")
+
+        wf = captured["workflow"]
+        loader = next(n for n in wf.values() if n["class_type"] == "UpscaleModelLoader")
+        assert loader["inputs"]["model_name"] == "4x-UltraSharp.pth"
+
+    async def test_upscale_image_rejects_path_traversal(self, gen_components):
+        client, audit, limiter, inspector, sanitizer = gen_components
+        mcp = FastMCP("test")
+        tools = register_generation_tools(
+            mcp, client, audit, limiter, inspector, sanitizer=sanitizer
+        )
+        with pytest.raises(PathValidationError, match="traversal"):
+            await tools["upscale_image"](image="../../secret.png")
+
+    @respx.mock
+    async def test_upscale_image_wait_returns_structured_result(self, tmp_path):
+        from comfyui_mcp.progress import ProgressState
+        from comfyui_mcp.security.sanitizer import PathSanitizer
+
+        client = ComfyUIClient(base_url="http://test:8188")
+        audit = AuditLogger(audit_file=tmp_path / "audit.log")
+        limiter = RateLimiter(max_per_minute=60)
+        inspector = WorkflowInspector(mode="audit", dangerous_nodes=[], allowed_nodes=[])
+        sanitizer = PathSanitizer(allowed_extensions=[".png", ".jpg", ".pth"])
+        progress = WebSocketProgress(client, timeout=10.0)
+
+        respx.post("http://test:8188/prompt").mock(
+            return_value=httpx.Response(200, json={"prompt_id": "up-wait-1"})
+        )
+
+        async def fake_wait(prompt_id):
+            return ProgressState(
+                prompt_id=prompt_id,
+                status="completed",
+                elapsed_seconds=3.0,
+                outputs=[{"node_id": "4", "filename": "upscaled.png", "subfolder": "output"}],
+            )
+
+        import unittest.mock
+
+        mcp = FastMCP("test")
+        tools = register_generation_tools(
+            mcp, client, audit, limiter, inspector, sanitizer=sanitizer, progress=progress
+        )
+        with unittest.mock.patch.object(progress, "wait_for_completion", side_effect=fake_wait):
+            result = await tools["upscale_image"](image="small.png", wait=True)
+
+        data = json.loads(result)
+        assert data["prompt_id"] == "up-wait-1"
+        assert data["status"] == "completed"
+        assert len(data["outputs"]) == 1
+
+    # --- _validate_image_filename (no sanitizer fallback) ---
+
+    async def test_no_sanitizer_blocks_path_traversal(self, tmp_path):
+        """When sanitizer=None the inline check still blocks path traversal."""
+        client = ComfyUIClient(base_url="http://test:8188")
+        audit = AuditLogger(audit_file=tmp_path / "audit.log")
+        limiter = RateLimiter(max_per_minute=60)
+        inspector = WorkflowInspector(mode="audit", dangerous_nodes=[], allowed_nodes=[])
+        mcp = FastMCP("test")
+        tools = register_generation_tools(mcp, client, audit, limiter, inspector)
+        with pytest.raises(ValueError, match="path traversal"):
+            await tools["transform_image"](image="../evil.png", prompt="p")
+
+    async def test_no_sanitizer_blocks_null_byte(self, tmp_path):
+        client = ComfyUIClient(base_url="http://test:8188")
+        audit = AuditLogger(audit_file=tmp_path / "audit.log")
+        limiter = RateLimiter(max_per_minute=60)
+        inspector = WorkflowInspector(mode="audit", dangerous_nodes=[], allowed_nodes=[])
+        mcp = FastMCP("test")
+        tools = register_generation_tools(mcp, client, audit, limiter, inspector)
+        with pytest.raises(ValueError, match="null byte"):
+            await tools["transform_image"](image="evil\x00.png", prompt="p")

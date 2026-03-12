@@ -125,6 +125,9 @@ docker run --rm ghcr.io/hybridindie/comfyui-mcp:latest --help
 | Tool | Description |
 |------|-------------|
 | `generate_image` | Text-to-image using a built-in workflow. Params: prompt, negative_prompt, width, height, steps, cfg, model. Set `wait=True` to block until complete and return outputs. |
+| `transform_image` | Image-to-image transformation. Params: image (filename), prompt, negative_prompt, strength (0.0-1.0), steps, cfg, model. Input must be uploaded via `upload_image` first. |
+| `inpaint_image` | Inpaint masked regions of an image. Params: image, mask (filenames), prompt, negative_prompt, strength, steps, cfg, model. Both files must be uploaded first. |
+| `upscale_image` | Upscale an image using a model-based upscaler. Params: image (filename), upscale_model (default: RealESRGAN_x4plus.pth). |
 | `run_workflow` | Submit arbitrary ComfyUI workflow JSON. Inspected for dangerous nodes before execution. Set `wait=True` to block until complete and return outputs. |
 | `summarize_workflow` | Summarize a workflow's structure, data flow, models, and parameters. Supports `format="text"` (default) or `format="mermaid"` for diagram markup. |
 | `create_workflow` | Create a workflow from a template (txt2img, img2img, upscale, inpaint, txt2vid_animatediff, txt2vid_wan) with parameter overrides. |
