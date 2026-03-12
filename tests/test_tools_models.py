@@ -32,6 +32,7 @@ def components(tmp_path):
         allowed_extensions=[".safetensors", ".ckpt", ".pt", ".pth", ".bin"],
     )
     search_settings = ModelSearchSettings()
+    search_http = httpx.AsyncClient()
     return {
         "client": client,
         "audit": audit,
@@ -41,6 +42,7 @@ def components(tmp_path):
         "detector": detector,
         "validator": validator,
         "search_settings": search_settings,
+        "search_http": search_http,
     }
 
 
@@ -57,6 +59,7 @@ def registered_tools(components):
         detector=components["detector"],
         validator=components["validator"],
         search_settings=components["search_settings"],
+        search_http=components["search_http"],
     )
     return tools
 
@@ -148,6 +151,7 @@ class TestSearchModels:
             detector=components["detector"],
             validator=components["validator"],
             search_settings=components["search_settings"],
+            search_http=components["search_http"],
         )
         route = respx.get("https://civitai.com/api/v1/models").mock(
             return_value=httpx.Response(200, json={"items": [], "metadata": {"totalItems": 0}})
@@ -159,22 +163,22 @@ class TestSearchModels:
 class TestSearchModelsInputValidation:
     @respx.mock
     async def test_query_too_long_rejected(self, registered_tools):
-        with pytest.raises(ValueError, match="query.*200"):
+        with pytest.raises(ValueError, match=r"query.*200"):
             await registered_tools["search_models"](query="x" * 201, source="civitai")
 
     @respx.mock
     async def test_empty_query_rejected(self, registered_tools):
-        with pytest.raises(ValueError, match="query.*empty"):
+        with pytest.raises(ValueError, match=r"query.*empty"):
             await registered_tools["search_models"](query="", source="civitai")
 
     @respx.mock
     async def test_query_whitespace_only_rejected(self, registered_tools):
-        with pytest.raises(ValueError, match="query.*empty"):
+        with pytest.raises(ValueError, match=r"query.*empty"):
             await registered_tools["search_models"](query="   ", source="civitai")
 
     @respx.mock
     async def test_model_type_too_long_rejected(self, registered_tools):
-        with pytest.raises(ValueError, match="model_type.*100"):
+        with pytest.raises(ValueError, match=r"model_type.*100"):
             await registered_tools["search_models"](
                 query="test", source="civitai", model_type="x" * 101
             )
@@ -336,6 +340,35 @@ class TestCancelDownload:
         assert parsed["success"] is True
         assert parsed["task_id"] == "task-1"
         assert parsed["result"] == {"success": True}
+
+
+class TestHuggingFaceConcurrency:
+    @respx.mock
+    async def test_hf_detail_fetches_are_concurrent(self, registered_tools):
+        """Detail requests should be issued concurrently, not sequentially."""
+        respx.get("https://huggingface.co/api/models").mock(
+            return_value=httpx.Response(
+                200,
+                json=[{"id": f"org/model-{i}", "downloads": 100, "likes": 10} for i in range(3)],
+            )
+        )
+        for i in range(3):
+            respx.get(f"https://huggingface.co/api/models/org/model-{i}").mock(
+                return_value=httpx.Response(
+                    200,
+                    json={
+                        "id": f"org/model-{i}",
+                        "siblings": [{"rfilename": "model.safetensors", "size": 1000000}],
+                    },
+                )
+            )
+        result = await registered_tools["search_models"](
+            query="test", source="huggingface", limit=3
+        )
+        parsed = json.loads(result)
+        assert len(parsed["results"]) == 3
+        # 1 search + 3 detail calls
+        assert respx.calls.call_count >= 4
 
 
 class TestServerWiring:

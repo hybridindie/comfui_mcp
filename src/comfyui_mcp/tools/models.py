@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 from urllib.parse import urlparse
@@ -29,6 +30,7 @@ async def _search_civitai(
     model_type: str,
     limit: int,
     api_key: str,
+    http: httpx.AsyncClient,
 ) -> list[dict[str, Any]]:
     """Search CivitAI for models."""
     params: dict[str, str | int] = {"query": query, "limit": limit}
@@ -40,10 +42,9 @@ async def _search_civitai(
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
-    async with httpx.AsyncClient() as http:
-        r = await http.get(_CIVITAI_API, params=params, headers=headers, timeout=30)
-        r.raise_for_status()
-        data = r.json()
+    r = await http.get(_CIVITAI_API, params=params, headers=headers, timeout=30)
+    r.raise_for_status()
+    data = r.json()
 
     results: list[dict[str, Any]] = []
     for item in data.get("items", []):
@@ -69,13 +70,57 @@ async def _search_civitai(
     return results
 
 
+async def _fetch_hf_model_detail(
+    http: httpx.AsyncClient,
+    model: dict[str, Any],
+    headers: dict[str, str],
+) -> dict[str, Any]:
+    """Fetch detail for a single HuggingFace model."""
+    model_id = model.get("id", "")
+    detail_url = f"{_HF_API}/{model_id}"
+    try:
+        dr = await http.get(detail_url, headers=headers, timeout=30)
+        dr.raise_for_status()
+        detail = dr.json()
+    except httpx.HTTPError:
+        detail = {}
+
+    siblings = detail.get("siblings", [])
+    model_file = None
+    model_size = 0
+    for sib in siblings:
+        fname = sib.get("rfilename", "")
+        ext = "." + fname.rsplit(".", 1)[-1] if "." in fname else ""
+        if ext.lower() in _MODEL_EXTENSIONS:
+            size = sib.get("size", 0)
+            if size > model_size:
+                model_size = size
+                model_file = fname
+
+    download_url = ""
+    if model_file:
+        download_url = f"https://huggingface.co/{model_id}/resolve/main/{model_file}"
+
+    return {
+        "name": model_id,
+        "type": model.get("pipeline_tag", ""),
+        "url": download_url,
+        "filename": model_file or "",
+        "size_mb": round(model_size / (1024 * 1024), 1) if model_size else 0,
+        "downloads": model.get("downloads", 0),
+        "likes": model.get("likes", 0),
+        "source": "huggingface",
+    }
+
+
 async def _search_huggingface(
     query: str,
     model_type: str,
     limit: int,
     token: str,
+    http: httpx.AsyncClient,
 ) -> list[dict[str, Any]]:
-    """Search HuggingFace for models."""
+    """Search HuggingFace for models with concurrent detail fetches."""
     params: dict[str, str | int] = {"search": query, "limit": limit}
     if model_type:
         params["pipeline_tag"] = model_type
@@ -84,54 +129,12 @@ async def _search_huggingface(
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
-    async with httpx.AsyncClient() as http:
-        r = await http.get(_HF_API, params=params, headers=headers, timeout=30)
-        r.raise_for_status()
-        models = r.json()
+    r = await http.get(_HF_API, params=params, headers=headers, timeout=30)
+    r.raise_for_status()
+    models = r.json()
 
-        results: list[dict[str, Any]] = []
-        for model in models:
-            model_id = model.get("id", "")
-
-            # Fetch file details to find the primary model file
-            detail_url = f"{_HF_API}/{model_id}"
-            try:
-                dr = await http.get(detail_url, headers=headers, timeout=30)
-                dr.raise_for_status()
-                detail = dr.json()
-            except httpx.HTTPError:
-                detail = {}
-
-            # Find the largest model file
-            siblings = detail.get("siblings", [])
-            model_file = None
-            model_size = 0
-            for sib in siblings:
-                fname = sib.get("rfilename", "")
-                ext = "." + fname.rsplit(".", 1)[-1] if "." in fname else ""
-                if ext.lower() in _MODEL_EXTENSIONS:
-                    size = sib.get("size", 0)
-                    if size > model_size:
-                        model_size = size
-                        model_file = fname
-
-            download_url = ""
-            if model_file:
-                download_url = f"https://huggingface.co/{model_id}/resolve/main/{model_file}"
-
-            results.append(
-                {
-                    "name": model_id,
-                    "type": model.get("pipeline_tag", ""),
-                    "url": download_url,
-                    "filename": model_file or "",
-                    "size_mb": round(model_size / (1024 * 1024), 1) if model_size else 0,
-                    "downloads": model.get("downloads", 0),
-                    "likes": model.get("likes", 0),
-                    "source": "huggingface",
-                }
-            )
-    return results
+    results = await asyncio.gather(*[_fetch_hf_model_detail(http, m, headers) for m in models])
+    return list(results)
 
 
 def register_model_tools(
@@ -144,6 +147,7 @@ def register_model_tools(
     detector: ModelManagerDetector,
     validator: DownloadValidator,
     search_settings: ModelSearchSettings,
+    search_http: httpx.AsyncClient,
 ) -> dict[str, Any]:
     """Register model search and download tools."""
     tool_fns: dict[str, Any] = {}
@@ -192,11 +196,11 @@ def register_model_tools(
 
         if source == "civitai":
             results = await _search_civitai(
-                stripped_query, model_type, cap, search_settings.civitai_api_key
+                stripped_query, model_type, cap, search_settings.civitai_api_key, search_http
             )
         else:
             results = await _search_huggingface(
-                stripped_query, model_type, cap, search_settings.huggingface_token
+                stripped_query, model_type, cap, search_settings.huggingface_token, search_http
             )
 
         audit.log(

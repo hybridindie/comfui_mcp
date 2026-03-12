@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
 from mcp.server.fastmcp import FastMCP
 
 from comfyui_mcp.audit import AuditLogger
@@ -83,6 +84,7 @@ def _register_all_tools(
     download_validator: DownloadValidator,
     model_checker: ModelChecker,
     model_search_settings: ModelSearchSettings,
+    search_http: httpx.AsyncClient,
 ) -> None:
     """Register all MCP tool groups with their dependencies."""
     register_discovery_tools(server, client, audit, rate_limiters["read"], sanitizer, node_auditor)
@@ -118,6 +120,7 @@ def _register_all_tools(
         detector=detector,
         validator=download_validator,
         search_settings=model_search_settings,
+        search_http=search_http,
     )
 
 
@@ -144,6 +147,7 @@ def _build_server(settings: Settings | None = None) -> tuple[FastMCP, Settings]:
         allowed_extensions=settings.security.allowed_model_extensions,
     )
     model_checker = ModelChecker()
+    search_http = httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=30, write=10, pool=10))
 
     server_kwargs: dict = {
         "name": "ComfyUI",
@@ -183,6 +187,7 @@ def _build_server(settings: Settings | None = None) -> tuple[FastMCP, Settings]:
         download_validator=download_validator,
         model_checker=model_checker,
         model_search_settings=settings.model_search,
+        search_http=search_http,
     )
 
     return server, settings
