@@ -30,13 +30,16 @@ def register_workflow_tools(
     async def create_workflow(template: str, params: str = "{}") -> str:
         """Create a ComfyUI workflow from a template with optional parameter overrides.
 
-        Available templates: txt2img, img2img, upscale, inpaint, txt2vid_animatediff, txt2vid_wan.
+        Available templates: txt2img, img2img, upscale, inpaint, txt2vid_animatediff,
+        txt2vid_wan, controlnet_canny, controlnet_depth, controlnet_openpose,
+        ip_adapter, lora_stack, face_restore, flux_txt2img, sdxl_txt2img.
 
         Args:
             template: Template name (e.g. 'txt2img', 'img2img')
             params: Optional JSON string of parameter overrides.
                     Common params: prompt, negative_prompt, width, height,
-                    steps, cfg, model, denoise.
+                    steps, cfg, model, denoise, controlnet_model,
+                    control_strength, lora_name, lora_strength.
         """
         limiter.check("create_workflow")
         try:

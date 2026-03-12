@@ -46,6 +46,18 @@ class TestCreateWorkflow:
         sampler = next(v for v in wf.values() if v["class_type"] == "KSampler")
         assert sampler["inputs"]["steps"] == 30
 
+    async def test_creates_expanded_template(self, components):
+        client, audit, limiter, inspector = components
+        mcp = FastMCP("test")
+        tools = register_workflow_tools(mcp, client, audit, limiter, inspector)
+        params = json.dumps({"control_strength": 0.8})
+        result = await tools["create_workflow"](template="controlnet_canny", params=params)
+        wf = json.loads(result)
+        class_types = {v["class_type"] for v in wf.values()}
+        assert "ControlNetApplyAdvanced" in class_types
+        control_apply = next(v for v in wf.values() if v["class_type"] == "ControlNetApplyAdvanced")
+        assert control_apply["inputs"]["strength"] == 0.8
+
     async def test_invalid_template_raises(self, components):
         client, audit, limiter, inspector = components
         mcp = FastMCP("test")

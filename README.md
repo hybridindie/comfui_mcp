@@ -131,7 +131,7 @@ docker run --rm ghcr.io/hybridindie/comfyui-mcp:latest --help
 | `upscale_image` | Upscale an image using a model-based upscaler. Params: image (filename), upscale_model (default: RealESRGAN_x4plus.pth). |
 | `run_workflow` | Submit arbitrary ComfyUI workflow JSON. Inspected for dangerous nodes before execution. Set `wait=True` to block until complete and return outputs. |
 | `summarize_workflow` | Summarize a workflow's structure, data flow, models, and parameters. Supports `format="text"` (default) or `format="mermaid"` for diagram markup. |
-| `create_workflow` | Create a workflow from a template (txt2img, img2img, upscale, inpaint, txt2vid_animatediff, txt2vid_wan) with parameter overrides. |
+| `create_workflow` | Create a workflow from templates including txt2img/img2img/upscale/inpaint, txt2vid_animatediff/txt2vid_wan, controlnet_canny/controlnet_depth/controlnet_openpose, ip_adapter, lora_stack, face_restore, flux_txt2img, and sdxl_txt2img. |
 | `modify_workflow` | Apply batch operations (add_node, remove_node, set_input, connect, disconnect) to a workflow. |
 | `validate_workflow` | Validate workflow structure, server compatibility, and security. |
 

@@ -154,5 +154,78 @@ class TestInvalidTemplate:
             "inpaint",
             "txt2vid_animatediff",
             "txt2vid_wan",
+            "controlnet_canny",
+            "controlnet_depth",
+            "controlnet_openpose",
+            "ip_adapter",
+            "lora_stack",
+            "face_restore",
+            "flux_txt2img",
+            "sdxl_txt2img",
         }
         assert set(TEMPLATES.keys()) == expected
+
+
+class TestExpandedTemplates:
+    def test_controlnet_canny_has_expected_nodes(self):
+        wf = create_from_template("controlnet_canny")
+        class_types = {v["class_type"] for v in wf.values()}
+        assert "CannyEdgePreprocessor" in class_types
+        assert "ControlNetLoader" in class_types
+        assert "ControlNetApplyAdvanced" in class_types
+
+    def test_controlnet_depth_override(self):
+        wf = create_from_template(
+            "controlnet_depth",
+            {"controlnet_model": "custom-depth.safetensors", "control_strength": 0.65},
+        )
+        loader = _get_nodes_by_type(wf, "ControlNetLoader")
+        assert loader[0]["inputs"]["control_net_name"] == "custom-depth.safetensors"
+        apply = _get_nodes_by_type(wf, "ControlNetApplyAdvanced")
+        assert apply[0]["inputs"]["strength"] == 0.65
+
+    def test_ip_adapter_weight_override(self):
+        wf = create_from_template(
+            "ip_adapter",
+            {
+                "ipadapter_model": "ip-adapter_sdxl.safetensors",
+                "clip_vision_model": "clip-vit-bigg-14.safetensors",
+                "ipadapter_weight": 0.5,
+            },
+        )
+        ip_model = _get_nodes_by_type(wf, "IPAdapterModelLoader")
+        assert ip_model[0]["inputs"]["ipadapter_file"] == "ip-adapter_sdxl.safetensors"
+        clip_vision = _get_nodes_by_type(wf, "CLIPVisionLoader")
+        assert clip_vision[0]["inputs"]["clip_name"] == "clip-vit-bigg-14.safetensors"
+        apply = _get_nodes_by_type(wf, "IPAdapterApply")
+        assert apply[0]["inputs"]["weight"] == 0.5
+
+    def test_lora_stack_overrides(self):
+        wf = create_from_template(
+            "lora_stack",
+            {"lora_name": "my_style.safetensors", "lora_strength": 0.9},
+        )
+        loras = _get_nodes_by_type(wf, "LoraLoader")
+        assert loras
+        for lora in loras:
+            assert lora["inputs"]["lora_name"] == "my_style.safetensors"
+            assert lora["inputs"]["strength_model"] == 0.9
+            assert lora["inputs"]["strength_clip"] == 0.9
+
+    def test_face_restore_and_family_specific_templates(self):
+        face_wf = create_from_template(
+            "face_restore",
+            {"model_name": "4x-UltraSharp.pth", "face_restore_model": "gfpgan_v1.4.pth"},
+        )
+        upscaler = _get_nodes_by_type(face_wf, "UpscaleModelLoader")
+        assert upscaler[0]["inputs"]["model_name"] == "4x-UltraSharp.pth"
+        restore = _get_nodes_by_type(face_wf, "FaceRestoreModelLoader")
+        assert restore[0]["inputs"]["model_name"] == "gfpgan_v1.4.pth"
+
+        flux_wf = create_from_template("flux_txt2img")
+        flux_sampler = _get_nodes_by_type(flux_wf, "KSampler")
+        assert flux_sampler[0]["inputs"]["cfg"] == 1.0
+
+        sdxl_wf = create_from_template("sdxl_txt2img")
+        sdxl_sampler = _get_nodes_by_type(sdxl_wf, "KSampler")
+        assert sdxl_sampler[0]["inputs"]["scheduler"] == "karras"
