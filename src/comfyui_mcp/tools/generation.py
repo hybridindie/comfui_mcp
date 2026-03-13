@@ -56,6 +56,67 @@ def _format_warnings(warnings: list[str]) -> str:
     return "\n⚠️ Warnings detected:\n" + "\n".join(f"  - {w}" for w in warnings)
 
 
+async def _submit_workflow(
+    *,
+    wf: dict[str, Any],
+    tool_name: str,
+    success_message: str,
+    wait: bool,
+    client: ComfyUIClient,
+    audit: AuditLogger,
+    inspector: WorkflowInspector,
+    progress: WebSocketProgress | None,
+    model_checker: ModelChecker | None = None,
+    inspect_extra: dict[str, Any] | None = None,
+) -> str:
+    """Inspect, submit, and optionally wait for a workflow.
+
+    Encapsulates the inspect -> audit -> submit -> wait pattern shared
+    by all generation tools.
+    """
+    inspection = inspector.inspect(wf)
+    if model_checker is not None:
+        model_warnings = await model_checker.check_models(wf, client)
+        if model_warnings:
+            inspection.warnings.extend(model_warnings)
+            if inspector.mode == "enforce":
+                raise WorkflowBlockedError(f"Workflow blocked — missing models: {model_warnings}")
+
+    log_kwargs: dict[str, Any] = {
+        "tool": tool_name,
+        "action": "inspected",
+        "nodes_used": inspection.nodes_used,
+        "warnings": inspection.warnings,
+    }
+    if inspect_extra:
+        log_kwargs["extra"] = inspect_extra
+    if model_checker is not None:
+        log_kwargs["status"] = "allowed"
+    await audit.async_log(**log_kwargs)
+
+    warning_msg = _format_warnings(inspection.warnings)
+
+    ws_client_id = progress.client_id if wait and progress is not None else None
+    response = await client.post_prompt(wf, client_id=ws_client_id)
+    prompt_id = response.get("prompt_id", "unknown")
+    await audit.async_log(tool=tool_name, action="submitted", prompt_id=prompt_id)
+
+    if wait and progress is not None:
+        state = await progress.wait_for_completion(prompt_id)
+        await audit.async_log(
+            tool=tool_name,
+            action="completed",
+            prompt_id=prompt_id,
+            extra={"status": state.status, "elapsed": state.elapsed_seconds},
+        )
+        result_dict = state.to_dict()
+        if inspection.warnings:
+            result_dict["warnings"] = inspection.warnings
+        return json.dumps(result_dict)
+
+    return f"{success_message} prompt_id: {prompt_id}{warning_msg}"
+
+
 # Default txt2img workflow — uses standard ComfyUI nodes
 _DEFAULT_TXT2IMG: dict[str, dict[str, Any]] = {
     "3": {
@@ -306,46 +367,17 @@ def register_generation_tools(
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON workflow: {e}") from e
 
-        # Inspect the workflow
-        inspection = inspector.inspect(wf)
-        if model_checker is not None:
-            model_warnings = await model_checker.check_models(wf, client)
-            if model_warnings:
-                inspection.warnings.extend(model_warnings)
-                if inspector.mode == "enforce":
-                    raise WorkflowBlockedError(
-                        f"Workflow blocked — missing models: {model_warnings}"
-                    )
-        await audit.async_log(
-            tool="run_workflow",
-            action="inspected",
-            nodes_used=inspection.nodes_used,
-            warnings=inspection.warnings,
-            status="allowed",
+        return await _submit_workflow(
+            wf=wf,
+            tool_name="run_workflow",
+            success_message="Workflow submitted.",
+            wait=wait,
+            client=client,
+            audit=audit,
+            inspector=inspector,
+            progress=progress,
+            model_checker=model_checker,
         )
-
-        warning_msg = _format_warnings(inspection.warnings)
-
-        # Submit to ComfyUI — pass client_id when waiting so WebSocket receives events
-        ws_client_id = progress.client_id if wait and progress is not None else None
-        response = await client.post_prompt(wf, client_id=ws_client_id)
-        prompt_id = response.get("prompt_id", "unknown")
-        await audit.async_log(tool="run_workflow", action="submitted", prompt_id=prompt_id)
-
-        if wait and progress is not None:
-            state = await progress.wait_for_completion(prompt_id)
-            await audit.async_log(
-                tool="run_workflow",
-                action="completed",
-                prompt_id=prompt_id,
-                extra={"status": state.status, "elapsed": state.elapsed_seconds},
-            )
-            result_dict = state.to_dict()
-            if inspection.warnings:
-                result_dict["warnings"] = inspection.warnings
-            return json.dumps(result_dict)
-
-        return f"Workflow submitted. prompt_id: {prompt_id}{warning_msg}"
 
     tool_fns["run_workflow"] = run_workflow
 
@@ -385,44 +417,18 @@ def register_generation_tools(
         limiter.check("generate_image")
         wf = _build_txt2img_workflow(prompt, negative_prompt, width, height, steps, cfg, model)
 
-        inspection = inspector.inspect(wf)
-        if model_checker is not None:
-            model_warnings = await model_checker.check_models(wf, client)
-            if model_warnings:
-                inspection.warnings.extend(model_warnings)
-                if inspector.mode == "enforce":
-                    raise WorkflowBlockedError(
-                        f"Workflow blocked — missing models: {model_warnings}"
-                    )
-        await audit.async_log(
-            tool="generate_image",
-            action="inspected",
-            nodes_used=inspection.nodes_used,
-            warnings=inspection.warnings,
-            extra={"prompt": prompt, "width": width, "height": height},
+        return await _submit_workflow(
+            wf=wf,
+            tool_name="generate_image",
+            success_message="Image generation started.",
+            wait=wait,
+            client=client,
+            audit=audit,
+            inspector=inspector,
+            progress=progress,
+            model_checker=model_checker,
+            inspect_extra={"prompt": prompt, "width": width, "height": height},
         )
-
-        warning_msg = _format_warnings(inspection.warnings)
-
-        ws_client_id = progress.client_id if wait and progress is not None else None
-        response = await client.post_prompt(wf, client_id=ws_client_id)
-        prompt_id = response.get("prompt_id", "unknown")
-        await audit.async_log(tool="generate_image", action="submitted", prompt_id=prompt_id)
-
-        if wait and progress is not None:
-            state = await progress.wait_for_completion(prompt_id)
-            await audit.async_log(
-                tool="generate_image",
-                action="completed",
-                prompt_id=prompt_id,
-                extra={"status": state.status, "elapsed": state.elapsed_seconds},
-            )
-            result_dict = state.to_dict()
-            if inspection.warnings:
-                result_dict["warnings"] = inspection.warnings
-            return json.dumps(result_dict)
-
-        return f"Image generation started. prompt_id: {prompt_id}{warning_msg}"
 
     tool_fns["generate_image"] = generate_image
 
@@ -522,35 +528,18 @@ def register_generation_tools(
             params["model"] = model
 
         wf = _create_from_template("img2img", params)
-        inspection = inspector.inspect(wf)
-        await audit.async_log(
-            tool="transform_image",
-            action="inspected",
-            nodes_used=inspection.nodes_used,
-            warnings=inspection.warnings,
-            extra={"image": clean_image, "prompt": prompt, "strength": strength},
+
+        return await _submit_workflow(
+            wf=wf,
+            tool_name="transform_image",
+            success_message="Image transformation started.",
+            wait=wait,
+            client=client,
+            audit=audit,
+            inspector=inspector,
+            progress=progress,
+            inspect_extra={"image": clean_image, "prompt": prompt, "strength": strength},
         )
-
-        warning_msg = _format_warnings(inspection.warnings)
-        ws_client_id = progress.client_id if wait and progress is not None else None
-        response = await client.post_prompt(wf, client_id=ws_client_id)
-        prompt_id = response.get("prompt_id", "unknown")
-        await audit.async_log(tool="transform_image", action="submitted", prompt_id=prompt_id)
-
-        if wait and progress is not None:
-            state = await progress.wait_for_completion(prompt_id)
-            await audit.async_log(
-                tool="transform_image",
-                action="completed",
-                prompt_id=prompt_id,
-                extra={"status": state.status, "elapsed": state.elapsed_seconds},
-            )
-            result_dict = state.to_dict()
-            if inspection.warnings:
-                result_dict["warnings"] = inspection.warnings
-            return json.dumps(result_dict)
-
-        return f"Image transformation started. prompt_id: {prompt_id}{warning_msg}"
 
     tool_fns["transform_image"] = transform_image
 
@@ -606,35 +595,18 @@ def register_generation_tools(
             params["model"] = model
 
         wf = _create_from_template("inpaint", params)
-        inspection = inspector.inspect(wf)
-        await audit.async_log(
-            tool="inpaint_image",
-            action="inspected",
-            nodes_used=inspection.nodes_used,
-            warnings=inspection.warnings,
-            extra={"image": clean_image, "mask": clean_mask, "prompt": prompt},
+
+        return await _submit_workflow(
+            wf=wf,
+            tool_name="inpaint_image",
+            success_message="Inpainting started.",
+            wait=wait,
+            client=client,
+            audit=audit,
+            inspector=inspector,
+            progress=progress,
+            inspect_extra={"image": clean_image, "mask": clean_mask, "prompt": prompt},
         )
-
-        warning_msg = _format_warnings(inspection.warnings)
-        ws_client_id = progress.client_id if wait and progress is not None else None
-        response = await client.post_prompt(wf, client_id=ws_client_id)
-        prompt_id = response.get("prompt_id", "unknown")
-        await audit.async_log(tool="inpaint_image", action="submitted", prompt_id=prompt_id)
-
-        if wait and progress is not None:
-            state = await progress.wait_for_completion(prompt_id)
-            await audit.async_log(
-                tool="inpaint_image",
-                action="completed",
-                prompt_id=prompt_id,
-                extra={"status": state.status, "elapsed": state.elapsed_seconds},
-            )
-            result_dict = state.to_dict()
-            if inspection.warnings:
-                result_dict["warnings"] = inspection.warnings
-            return json.dumps(result_dict)
-
-        return f"Inpainting started. prompt_id: {prompt_id}{warning_msg}"
 
     tool_fns["inpaint_image"] = inpaint_image
 
@@ -659,35 +631,18 @@ def register_generation_tools(
         clean_image = _validate_image_filename(image, sanitizer)
 
         wf = _create_from_template("upscale", {"image": clean_image, "model_name": upscale_model})
-        inspection = inspector.inspect(wf)
-        await audit.async_log(
-            tool="upscale_image",
-            action="inspected",
-            nodes_used=inspection.nodes_used,
-            warnings=inspection.warnings,
-            extra={"image": clean_image, "upscale_model": upscale_model},
+
+        return await _submit_workflow(
+            wf=wf,
+            tool_name="upscale_image",
+            success_message="Upscaling started.",
+            wait=wait,
+            client=client,
+            audit=audit,
+            inspector=inspector,
+            progress=progress,
+            inspect_extra={"image": clean_image, "upscale_model": upscale_model},
         )
-
-        warning_msg = _format_warnings(inspection.warnings)
-        ws_client_id = progress.client_id if wait and progress is not None else None
-        response = await client.post_prompt(wf, client_id=ws_client_id)
-        prompt_id = response.get("prompt_id", "unknown")
-        await audit.async_log(tool="upscale_image", action="submitted", prompt_id=prompt_id)
-
-        if wait and progress is not None:
-            state = await progress.wait_for_completion(prompt_id)
-            await audit.async_log(
-                tool="upscale_image",
-                action="completed",
-                prompt_id=prompt_id,
-                extra={"status": state.status, "elapsed": state.elapsed_seconds},
-            )
-            result_dict = state.to_dict()
-            if inspection.warnings:
-                result_dict["warnings"] = inspection.warnings
-            return json.dumps(result_dict)
-
-        return f"Upscaling started. prompt_id: {prompt_id}{warning_msg}"
 
     tool_fns["upscale_image"] = upscale_image
 
