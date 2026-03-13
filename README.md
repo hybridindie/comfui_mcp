@@ -197,6 +197,18 @@ cancel_download(task_id="abc123")
 
 The `download_model` tool always sends a `previewFile` field (required by Model Manager even when empty). Omitting it causes the server to silently fail and delete the task.
 
+### Custom Node Management
+
+| Tool | Description |
+|------|-------------|
+| `search_custom_nodes` | Search the ComfyUI Manager registry for custom nodes by name, description, or author. Returns ID, name, description, author, and install status. |
+| `install_custom_node` | Install a custom node pack from the registry. Set `restart=True` to restart ComfyUI and run an automatic security audit on all installed nodes. |
+| `uninstall_custom_node` | Uninstall a custom node pack. Set `restart=True` to restart ComfyUI afterward. |
+| `update_custom_node` | Update a custom node pack to the latest version. Set `restart=True` to restart and audit. |
+| `get_custom_node_status` | Check the custom node operation queue status (total tasks, completed, in progress, processing state). |
+
+> **Requires:** [ComfyUI Manager](https://github.com/Comfy-Org/ComfyUI-Manager) installed in your ComfyUI instance. Tools are gated behind lazy detection — if ComfyUI Manager is not installed, these tools return a helpful error message.
+
 ### File Operations
 
 | Tool | Description |

@@ -204,6 +204,58 @@ class ComfyUIClient:
         r = await self._request("post", "/upload/mask", files=files, data=form_data)
         return r.json()
 
+    # --- ComfyUI Manager endpoints ---
+
+    async def get_manager_version(self) -> str:
+        """GET /manager/version — check ComfyUI Manager availability."""
+        r = await self._request("get", "/manager/version")
+        return r.text
+
+    async def get_custom_node_list(self, mode: str = "remote") -> dict:
+        """GET /customnode/getlist — search/list registry nodes."""
+        _validate_path_segment(mode, label="mode")
+        r = await self._request("get", "/customnode/getlist", params={"mode": mode})
+        return r.json()
+
+    async def queue_custom_node_install(self, node_id: str, version: str = "") -> None:
+        """POST /manager/queue/install — queue a node pack installation."""
+        payload: dict[str, str] = {"id": node_id}
+        if version:
+            payload["version"] = version
+        await self._request("post", "/manager/queue/install", json=payload)
+
+    async def queue_custom_node_uninstall(self, node_id: str, version: str = "") -> None:
+        """POST /manager/queue/uninstall — queue a node pack removal."""
+        payload: dict[str, str] = {"id": node_id}
+        if version:
+            payload["version"] = version
+        await self._request("post", "/manager/queue/uninstall", json=payload)
+
+    async def queue_custom_node_update(self, node_id: str, version: str = "") -> None:
+        """POST /manager/queue/update — queue a node pack update."""
+        payload: dict[str, str] = {"id": node_id}
+        if version:
+            payload["version"] = version
+        await self._request("post", "/manager/queue/update", json=payload)
+
+    async def start_custom_node_queue(self) -> None:
+        """GET /manager/queue/start — start processing queued tasks."""
+        await self._request("get", "/manager/queue/start")
+
+    async def get_custom_node_queue_status(self) -> dict:
+        """GET /manager/queue/status — poll queue progress."""
+        r = await self._request("get", "/manager/queue/status")
+        return r.json()
+
+    async def reboot_comfyui(self) -> None:
+        """GET /manager/reboot — restart ComfyUI.
+
+        NOTE: This endpoint uses GET (unusual for a destructive action) —
+        this is upstream ComfyUI Manager behavior. Only called when the user
+        explicitly passes restart=True and the job queue is verified empty.
+        """
+        await self._request("get", "/manager/reboot")
+
     # --- Model Manager endpoints ---
 
     async def get_model_manager_folders(self) -> list[str]:

@@ -13,6 +13,7 @@ from comfyui_mcp.audit import AuditLogger
 from comfyui_mcp.client import ComfyUIClient
 from comfyui_mcp.config import ModelSearchSettings, Settings, load_settings
 from comfyui_mcp.model_manager import ModelManagerDetector
+from comfyui_mcp.node_manager import ComfyUIManagerDetector
 from comfyui_mcp.progress import WebSocketProgress
 from comfyui_mcp.security.download_validator import DownloadValidator
 from comfyui_mcp.security.inspector import WorkflowInspector
@@ -26,6 +27,7 @@ from comfyui_mcp.tools.generation import register_generation_tools
 from comfyui_mcp.tools.history import register_history_tools
 from comfyui_mcp.tools.jobs import register_job_tools
 from comfyui_mcp.tools.models import register_model_tools
+from comfyui_mcp.tools.nodes import register_node_tools
 from comfyui_mcp.tools.workflow import register_workflow_tools
 
 
@@ -87,6 +89,7 @@ def _register_all_tools(
     model_checker: ModelChecker,
     model_search_settings: ModelSearchSettings,
     search_http: httpx.AsyncClient,
+    node_manager: ComfyUIManagerDetector,
 ) -> None:
     """Register all MCP tool groups with their dependencies."""
     register_discovery_tools(server, client, audit, rate_limiters["read"], sanitizer, node_auditor)
@@ -124,6 +127,15 @@ def _register_all_tools(
         search_settings=model_search_settings,
         search_http=search_http,
     )
+    register_node_tools(
+        mcp=server,
+        client=client,
+        audit=audit,
+        wf_limiter=rate_limiters["workflow"],
+        read_limiter=rate_limiters["read"],
+        node_manager=node_manager,
+        node_auditor=node_auditor,
+    )
 
 
 def _build_server(
@@ -139,6 +151,9 @@ def _build_server(
     sanitizer = _create_path_sanitizer(settings)
     node_auditor = NodeAuditor()
     rate_limiters = _create_rate_limiters(settings)
+
+    # Node management dependencies
+    node_manager = ComfyUIManagerDetector(client)
 
     # Model tools dependencies
     detector = ModelManagerDetector(client)
@@ -192,6 +207,7 @@ def _build_server(
         model_checker=model_checker,
         model_search_settings=settings.model_search,
         search_http=search_http,
+        node_manager=node_manager,
     )
 
     return server, settings, client, search_http
