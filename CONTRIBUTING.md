@@ -90,7 +90,7 @@ This project handles workflow execution against ComfyUI. When adding features:
 ## Adding a New Tool
 
 1. Add tool function to appropriate `tools/*.py`
-2. Use `@server.tool()` decorator
+2. Use `@mcp.tool()` decorator
 3. Add rate limiter check
 4. Log via `audit.log()` with structured JSON
 5. Add test in `tests/`

@@ -20,7 +20,6 @@
 
 ## Security-Critical Rules
 
-- Never expose blocked ComfyUI endpoints: `/userdata`, `/free`, `/users`, `/history` POST delete, `/system_stats`.
 - Never expose blocked ComfyUI endpoints: `/userdata`, `/free`, `/users`, `/history` POST delete. `/system_stats` may only be called internally by `get_system_stats()` to serve the `get_system_info` tool, which applies a strict output whitelist — no raw response is ever returned.
 - Every tool must:
   - call `limiter.check("tool_name")` first,
