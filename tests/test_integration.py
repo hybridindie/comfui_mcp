@@ -48,7 +48,7 @@ class TestImageGenerationFlow:
         )
 
         settings = Settings(comfyui=ComfyUISettings(url="http://mock-comfyui:8188"))
-        server, _ = _build_server(settings)
+        server, *_ = _build_server(settings)
 
         # Step 1: Discover available models
         tools = server._tool_manager._tools
@@ -76,7 +76,7 @@ class TestImageGenerationFlow:
         )
 
         settings = Settings(comfyui=ComfyUISettings(url="http://mock-comfyui:8188"))
-        server, _ = _build_server(settings)
+        server, *_ = _build_server(settings)
 
         run_workflow_fn = server._tool_manager._tools["run_workflow"].fn
         workflow = json.dumps({"1": {"class_type": "Terminal", "inputs": {}}})
@@ -93,7 +93,7 @@ class TestImageGenerationFlow:
                 allowed_nodes=["KSampler", "CLIPTextEncode"],
             ),
         )
-        server, _ = _build_server(settings)
+        server, *_ = _build_server(settings)
 
         run_workflow_fn = server._tool_manager._tools["run_workflow"].fn
         workflow = json.dumps({"1": {"class_type": "MaliciousNode", "inputs": {}}})

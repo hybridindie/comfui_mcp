@@ -17,7 +17,7 @@ from comfyui_mcp.tools.models import register_model_tools
 
 
 @pytest.fixture
-def components(tmp_path):
+async def components(tmp_path):
     client = ComfyUIClient(base_url="http://test:8188")
     audit = AuditLogger(audit_file=tmp_path / "audit.log")
     read_limiter = RateLimiter(max_per_minute=60)
@@ -33,7 +33,7 @@ def components(tmp_path):
     )
     search_settings = ModelSearchSettings()
     search_http = httpx.AsyncClient()
-    return {
+    yield {
         "client": client,
         "audit": audit,
         "read_limiter": read_limiter,
@@ -44,6 +44,7 @@ def components(tmp_path):
         "search_settings": search_settings,
         "search_http": search_http,
     }
+    await search_http.aclose()
 
 
 @pytest.fixture
@@ -374,5 +375,5 @@ class TestHuggingFaceConcurrency:
 class TestServerWiring:
     def test_model_tools_registered(self):
         """Verify that _register_all_tools accepts the new parameters."""
-        server, _settings = _build_server(settings=Settings())
+        server, _settings, *_ = _build_server(settings=Settings())
         assert server is not None

@@ -98,6 +98,16 @@ class TestAuditLoggerSymlinkProtection:
         # Symlink target should NOT have audit content
         assert real_file.read_text() == ""
 
+    def test_rejects_dangling_symlink(self, tmp_path):
+        """Audit logger should refuse a symlink even if target doesn't exist."""
+        symlink = tmp_path / "audit.log"
+        symlink.symlink_to(tmp_path / "nonexistent.log")
+
+        logger = AuditLogger(audit_file=symlink)
+        record = logger.log(tool="test", action="called")
+        assert record.tool == "test"
+        assert not (tmp_path / "nonexistent.log").exists()
+
     def test_rejects_symlink_in_parent_directory(self, tmp_path):
         """Audit logger should refuse if parent path contains a symlink."""
         real_dir = tmp_path / "real_dir"
@@ -110,6 +120,25 @@ class TestAuditLoggerSymlinkProtection:
         record = logger.log(tool="test", action="called")
         assert record.tool == "test"
         assert not audit_file.exists()
+
+    def test_detects_symlink_swap_after_initial_write(self, tmp_path):
+        """Symlink replacing the audit file after first write should be caught."""
+        log_file = tmp_path / "audit.log"
+        logger = AuditLogger(audit_file=log_file)
+
+        # First write succeeds to a normal file
+        logger.log(tool="first", action="called")
+        assert "first" in log_file.read_text()
+
+        # Attacker swaps the file for a symlink
+        evil_target = tmp_path / "evil.log"
+        evil_target.touch()
+        log_file.unlink()
+        log_file.symlink_to(evil_target)
+
+        # Second write should be refused
+        logger.log(tool="second", action="called")
+        assert "second" not in evil_target.read_text()
 
 
 class TestAuditLoggerAsync:

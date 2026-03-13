@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import atexit
+import contextlib
 from pathlib import Path
 
 import httpx
@@ -124,7 +126,9 @@ def _register_all_tools(
     )
 
 
-def _build_server(settings: Settings | None = None) -> tuple[FastMCP, Settings]:
+def _build_server(
+    settings: Settings | None = None,
+) -> tuple[FastMCP, Settings, ComfyUIClient, httpx.AsyncClient]:
     """Build and configure the MCP server with all tools registered."""
     if settings is None:
         settings = load_settings()
@@ -190,11 +194,26 @@ def _build_server(settings: Settings | None = None) -> tuple[FastMCP, Settings]:
         search_http=search_http,
     )
 
-    return server, settings
+    return server, settings, client, search_http
 
 
 # Module-level server instance for import and CLI use
-mcp, _settings = _build_server()
+mcp, _settings, _client, _search_http = _build_server()
+
+
+def _cleanup() -> None:
+    """Best-effort cleanup of HTTP clients on process exit."""
+    import asyncio
+
+    async def _close() -> None:
+        await _client.close()
+        await _search_http.aclose()
+
+    with contextlib.suppress(Exception):
+        asyncio.run(_close())
+
+
+atexit.register(_cleanup)
 
 
 def main() -> None:
