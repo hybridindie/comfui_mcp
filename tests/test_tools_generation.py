@@ -197,7 +197,9 @@ class TestAnalyzeWorkflow:
 
         assert result["node_count"] == 7
         assert "CheckpointLoaderSimple" in result["class_types"]
-        assert {"name": "v1-5-pruned-emaonly.safetensors", "type": "checkpoint"} in result["models"]
+        assert {"name": "v1-5-pruned-emaonly.safetensors", "type": "checkpoints"} in result[
+            "models"
+        ]
         assert result["parameters"]["steps"] == 20
         assert result["parameters"]["cfg"] == 7.0
         assert result["parameters"]["sampler"] == "euler"
@@ -332,7 +334,7 @@ class TestFormatSummary:
                     "inputs": {},
                 },
             ],
-            "models": [{"name": "v1-5-pruned-emaonly.safetensors", "type": "checkpoint"}],
+            "models": [{"name": "v1-5-pruned-emaonly.safetensors", "type": "checkpoints"}],
             "parameters": {
                 "steps": 20,
                 "cfg": 7.0,
@@ -349,7 +351,7 @@ class TestFormatSummary:
         result = _format_summary(analysis)
         assert "Workflow: 7 nodes" in result
         assert "Pipeline: txt2img" in result
-        assert "v1-5-pruned-emaonly.safetensors (checkpoint)" in result
+        assert "v1-5-pruned-emaonly.safetensors (checkpoints)" in result
         assert "steps=20" in result
         assert "Prompt: node 6" in result
         assert "Negative: node 7" in result

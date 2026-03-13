@@ -10,20 +10,11 @@ from typing import Any, TypedDict
 import httpx
 
 from comfyui_mcp.client import ComfyUIClient
+from comfyui_mcp.model_registry import MODEL_LOADER_FIELDS, get_single_field_loaders
 from comfyui_mcp.security.inspector import WorkflowBlockedError, WorkflowInspector
 
-# Node class_types that load models, mapped to their model input key and type label
-MODEL_LOADERS: dict[str, tuple[str, str]] = {
-    "CheckpointLoaderSimple": ("ckpt_name", "checkpoint"),
-    "CheckpointLoader": ("ckpt_name", "checkpoint"),
-    "LoraLoader": ("lora_name", "lora"),
-    "LoraLoaderModelOnly": ("lora_name", "lora"),
-    "VAELoader": ("vae_name", "vae"),
-    "UpscaleModelLoader": ("model_name", "upscale"),
-    "ControlNetLoader": ("control_net_name", "controlnet"),
-    "CLIPLoader": ("clip_name", "clip"),
-    "UNETLoader": ("unet_name", "unet"),
-}
+# Derived view for analyze_workflow: single-field loaders only
+_SINGLE_FIELD_LOADERS = get_single_field_loaders()
 
 INPUT_NODE_TYPES = {"LoadImage", "LoadImageMask", "EmptyLatentImage"}
 SAMPLER_NODE_TYPES = {"KSampler", "KSamplerAdvanced", "SamplerCustom"}
@@ -100,11 +91,11 @@ def analyze_workflow(
     models: list[dict[str, str]] = []
     for node in flow:
         ct = node["class_type"]
-        if ct in MODEL_LOADERS:
-            key, model_type = MODEL_LOADERS[ct]
+        if ct in _SINGLE_FIELD_LOADERS:
+            key, folder = _SINGLE_FIELD_LOADERS[ct]
             name = node["inputs"].get(key, "")
             if name:
-                models.append({"name": name, "type": model_type})
+                models.append({"name": name, "type": folder})
 
     parameters: dict[str, Any] = {}
     for node in flow:
@@ -242,27 +233,19 @@ async def validate_workflow(
                 errors.append(f"Node '{node_id}': class_type '{ct}' not installed on server")
 
         # Check models exist — batch by folder, fetch in parallel
-        _folder_map = {
-            "checkpoint": "checkpoints",
-            "lora": "loras",
-            "vae": "vae",
-            "upscale": "upscale_models",
-            "controlnet": "controlnet",
-            "clip": "clip",
-            "unet": "unet",
-        }
         folder_models: dict[str, list[tuple[str, str, str]]] = {}
         for node_id, node_data in workflow.items():
             if not isinstance(node_data, dict):
                 continue
             ct = node_data.get("class_type", "")
-            if ct in MODEL_LOADERS:
-                input_key, model_type = MODEL_LOADERS[ct]
+            if ct in MODEL_LOADER_FIELDS:
                 inputs = node_data.get("inputs")
-                model_name = inputs.get(input_key, "") if isinstance(inputs, dict) else ""
-                if model_name:
-                    folder = _folder_map.get(model_type, model_type)
-                    folder_models.setdefault(folder, []).append((node_id, model_type, model_name))
+                if not isinstance(inputs, dict):
+                    continue
+                for input_key, folder in MODEL_LOADER_FIELDS[ct]:
+                    model_name = inputs.get(input_key, "")
+                    if model_name:
+                        folder_models.setdefault(folder, []).append((node_id, folder, model_name))
 
         async def _fetch_folder(folder: str) -> tuple[str, list[str]]:
             try:
@@ -274,11 +257,10 @@ async def validate_workflow(
 
         for folder, checks in folder_models.items():
             available = folder_results.get(folder, [])
-            for node_id, model_type, model_name in checks:
+            for node_id, _folder, model_name in checks:
                 if available and model_name not in available:
                     warnings.append(
-                        f"Node '{node_id}': {model_type} model"
-                        f" '{model_name}' not found in '{folder}'"
+                        f"Node '{node_id}': {folder} model '{model_name}' not found in '{folder}'"
                     )
 
     # --- Security inspection ---
