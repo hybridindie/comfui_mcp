@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "mcp__comfyui__audit_dangerous_nodes|mcp__comfyui__install_custom_node|mcp__comfyui__update_custom_node|mcp__comfyui__run_workflow|mcp__comfyui__generate_image",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/security-warning.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
