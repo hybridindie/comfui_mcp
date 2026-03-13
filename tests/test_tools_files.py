@@ -297,3 +297,150 @@ class TestGetWorkflowFromImage:
         assert (
             "malformed" in result["message"].lower() or "no workflow" in result["message"].lower()
         )
+
+
+class TestListOutputs:
+    @respx.mock
+    async def test_returns_filenames_from_history(self, components):
+        client, audit, limiter, sanitizer = components
+        respx.get("http://test:8188/history").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "aaaaaaaa-1111-2222-3333-444444444444": {
+                        "outputs": {
+                            "9": {
+                                "images": [
+                                    {"filename": "image_001.png", "subfolder": ""},
+                                    {"filename": "image_002.png", "subfolder": ""},
+                                ]
+                            }
+                        }
+                    },
+                    "bbbbbbbb-1111-2222-3333-444444444444": {
+                        "outputs": {
+                            "9": {
+                                "images": [
+                                    {"filename": "image_003.png", "subfolder": "", "type": "output"}
+                                ]
+                            }
+                        }
+                    },
+                },
+            )
+        )
+        mcp = FastMCP("test")
+        tools = register_file_tools(mcp, client, audit, limiter, sanitizer)
+        result = await tools["list_outputs"]()
+        assert result == ["image_001.png", "image_002.png", "image_003.png"]
+
+    @respx.mock
+    async def test_deduplicates_filenames(self, components):
+        client, audit, limiter, sanitizer = components
+        respx.get("http://test:8188/history").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "aaa-1": {"outputs": {"9": {"images": [{"filename": "dup.png"}]}}},
+                    "aaa-2": {"outputs": {"9": {"images": [{"filename": "dup.png"}]}}},
+                },
+            )
+        )
+        mcp = FastMCP("test")
+        tools = register_file_tools(mcp, client, audit, limiter, sanitizer)
+        result = await tools["list_outputs"]()
+        assert result == ["dup.png"]
+
+    @respx.mock
+    async def test_empty_history(self, components):
+        client, audit, limiter, sanitizer = components
+        respx.get("http://test:8188/history").mock(return_value=httpx.Response(200, json={}))
+        mcp = FastMCP("test")
+        tools = register_file_tools(mcp, client, audit, limiter, sanitizer)
+        result = await tools["list_outputs"]()
+        assert result == []
+
+    @respx.mock
+    async def test_handles_malformed_entries(self, components):
+        """Entries missing expected keys should be skipped, not crash."""
+        client, audit, limiter, sanitizer = components
+        respx.get("http://test:8188/history").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "entry-1": {"outputs": {"9": {"images": [{"filename": "ok.png"}]}}},
+                    "entry-2": {"outputs": {"9": {"not_images": []}}},
+                    "entry-3": "not-a-dict",
+                    "entry-4": {"outputs": {"9": {"images": [{"no_filename": True}]}}},
+                },
+            )
+        )
+        mcp = FastMCP("test")
+        tools = register_file_tools(mcp, client, audit, limiter, sanitizer)
+        result = await tools["list_outputs"]()
+        assert result == ["ok.png"]
+
+
+class TestUploadMask:
+    @respx.mock
+    async def test_upload_valid_mask(self, components):
+        client, audit, limiter, sanitizer = components
+        respx.post("http://test:8188/upload/mask").mock(
+            return_value=httpx.Response(
+                200, json={"name": "mask.png", "subfolder": "", "type": "input"}
+            )
+        )
+        mcp = FastMCP("test")
+        tools = register_file_tools(mcp, client, audit, limiter, sanitizer)
+        mask_b64 = base64.b64encode(b"fake-mask-data").decode()
+        result = await tools["upload_mask"](filename="mask.png", mask_data=mask_b64)
+        assert "mask.png" in result
+
+    @respx.mock
+    async def test_upload_mask_path_traversal_blocked(self, components):
+        client, audit, limiter, sanitizer = components
+        mcp = FastMCP("test")
+        tools = register_file_tools(mcp, client, audit, limiter, sanitizer)
+        mask_b64 = base64.b64encode(b"data").decode()
+        with pytest.raises(PathValidationError, match="traversal"):
+            await tools["upload_mask"](filename="../../etc/passwd.png", mask_data=mask_b64)
+
+    @respx.mock
+    async def test_upload_mask_bad_extension_blocked(self, components):
+        client, audit, limiter, sanitizer = components
+        mcp = FastMCP("test")
+        tools = register_file_tools(mcp, client, audit, limiter, sanitizer)
+        mask_b64 = base64.b64encode(b"data").decode()
+        with pytest.raises(PathValidationError, match="extension"):
+            await tools["upload_mask"](filename="evil.py", mask_data=mask_b64)
+
+    @respx.mock
+    async def test_upload_mask_with_subfolder(self, components):
+        client, audit, limiter, sanitizer = components
+        respx.post("http://test:8188/upload/mask").mock(
+            return_value=httpx.Response(
+                200, json={"name": "mask.png", "subfolder": "masks", "type": "input"}
+            )
+        )
+        mcp = FastMCP("test")
+        tools = register_file_tools(mcp, client, audit, limiter, sanitizer)
+        mask_b64 = base64.b64encode(b"fake-mask-data").decode()
+        result = await tools["upload_mask"](
+            filename="mask.png", mask_data=mask_b64, subfolder="masks"
+        )
+        assert "mask.png" in result
+
+    @respx.mock
+    async def test_upload_mask_audit_logged(self, components):
+        client, audit, limiter, sanitizer = components
+        respx.post("http://test:8188/upload/mask").mock(
+            return_value=httpx.Response(
+                200, json={"name": "m.png", "subfolder": "", "type": "input"}
+            )
+        )
+        mcp = FastMCP("test")
+        tools = register_file_tools(mcp, client, audit, limiter, sanitizer)
+        mask_b64 = base64.b64encode(b"data").decode()
+        await tools["upload_mask"](filename="m.png", mask_data=mask_b64)
+        content = audit._audit_file.read_text()
+        assert "upload_mask" in content
