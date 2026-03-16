@@ -1,0 +1,5 @@
+{
+  "name": "comfy",
+  "description": "ComfyUI image generation via MCP with slash commands and skills",
+  "version": "1.0.0"
+}

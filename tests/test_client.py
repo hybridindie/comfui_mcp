@@ -339,3 +339,88 @@ class TestPathInjectionValidation:
         )
         result = await client.get_object_info("KSampler")
         assert "KSampler" in result
+
+
+class TestComfyUIManagerClient:
+    @respx.mock
+    async def test_get_manager_version(self, client):
+        respx.get("http://test-comfyui:8188/manager/version").mock(
+            return_value=httpx.Response(200, text="1.0.0")
+        )
+        result = await client.get_manager_version()
+        assert result == "1.0.0"
+
+    @respx.mock
+    async def test_get_custom_node_list(self, client):
+        payload = {
+            "channel": "default",
+            "node_packs": {
+                "comfyui-impact-pack": {
+                    "title": "Impact Pack",
+                    "installed": "True",
+                }
+            },
+        }
+        respx.get("http://test-comfyui:8188/customnode/getlist").mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+        result = await client.get_custom_node_list()
+        assert result["channel"] == "default"
+        assert "comfyui-impact-pack" in result["node_packs"]
+
+    @respx.mock
+    async def test_queue_custom_node_install(self, client):
+        route = respx.post("http://test-comfyui:8188/manager/queue/install").mock(
+            return_value=httpx.Response(200, json={})
+        )
+        await client.queue_custom_node_install("comfyui-impact-pack")
+        body = json.loads(route.calls[0].request.content)
+        assert body["id"] == "comfyui-impact-pack"
+
+    @respx.mock
+    async def test_queue_custom_node_uninstall(self, client):
+        route = respx.post("http://test-comfyui:8188/manager/queue/uninstall").mock(
+            return_value=httpx.Response(200, json={})
+        )
+        await client.queue_custom_node_uninstall("comfyui-impact-pack")
+        body = json.loads(route.calls[0].request.content)
+        assert body["id"] == "comfyui-impact-pack"
+
+    @respx.mock
+    async def test_queue_custom_node_update(self, client):
+        route = respx.post("http://test-comfyui:8188/manager/queue/update").mock(
+            return_value=httpx.Response(200, json={})
+        )
+        await client.queue_custom_node_update("comfyui-impact-pack")
+        body = json.loads(route.calls[0].request.content)
+        assert body["id"] == "comfyui-impact-pack"
+
+    @respx.mock
+    async def test_start_custom_node_queue(self, client):
+        respx.get("http://test-comfyui:8188/manager/queue/start").mock(
+            return_value=httpx.Response(200, json={})
+        )
+        await client.start_custom_node_queue()
+
+    @respx.mock
+    async def test_get_custom_node_queue_status(self, client):
+        payload = {
+            "is_processing": True,
+            "total_count": 3,
+            "processed_count": 1,
+            "current_action": "installing comfyui-impact-pack",
+        }
+        respx.get("http://test-comfyui:8188/manager/queue/status").mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+        result = await client.get_custom_node_queue_status()
+        assert result["is_processing"] is True
+        assert result["total_count"] == 3
+        assert result["processed_count"] == 1
+
+    @respx.mock
+    async def test_reboot_comfyui(self, client):
+        respx.get("http://test-comfyui:8188/manager/reboot").mock(
+            return_value=httpx.Response(200, json={})
+        )
+        await client.reboot_comfyui()

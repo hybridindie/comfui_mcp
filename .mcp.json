@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "comfyui": {
+      "command": "uvx",
+      "args": ["comfyui-mcp"],
+      "env": {
+        "COMFYUI_URL": "http://localhost:8188"
+      }
+    }
+  }
+}
