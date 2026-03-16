@@ -60,13 +60,13 @@ uv sync
 #### Option C: Docker (no clone required)
 
 ```bash
-docker pull ghcr.io/hybridindie/comfyui-mcp:latest
+docker pull ghcr.io/hybridindie/comfyui_mcp:latest
 ```
 
 Or build locally from the repo:
 
 ```bash
-docker build -t comfyui-mcp .
+docker build -t comfyui-mcp-secure .
 ```
 
 ### Configure
@@ -143,7 +143,7 @@ The MCP server communicates over stdio. Add one of the following configurations 
         "run", "--rm", "-i",
         "-e", "COMFYUI_URL=http://host.docker.internal:8188",
         "-v", "~/.comfyui-mcp:/root/.comfyui-mcp:ro",
-        "ghcr.io/hybridindie/comfyui-mcp:latest"
+        "ghcr.io/hybridindie/comfyui_mcp:latest"
       ]
     }
   }
@@ -159,7 +159,7 @@ The MCP server communicates over stdio. Add one of the following configurations 
 uv run python -c "from comfyui_mcp.server import mcp; print(f'Server {mcp.name!r} ready')"
 
 # Docker
-docker run --rm ghcr.io/hybridindie/comfyui-mcp:latest --help
+docker run --rm ghcr.io/hybridindie/comfyui_mcp:latest --help
 ```
 
 ## Tools
@@ -649,7 +649,7 @@ The download probe uses a tiny (~520 KB) safetensors file from `hf-internal-test
 A pre-built Docker image is published to the GitHub Container Registry. No need to clone the repo.
 
 ```bash
-docker pull ghcr.io/hybridindie/comfyui-mcp:latest
+docker pull ghcr.io/hybridindie/comfyui_mcp:latest
 ```
 
 ### How it works
@@ -663,14 +663,14 @@ The container runs `uv run comfyui-mcp-secure` as its entrypoint, communicating 
 docker run --rm -i \
   -e COMFYUI_URL=http://host.docker.internal:8188 \
   -v ~/.comfyui-mcp:/root/.comfyui-mcp:ro \
-  ghcr.io/hybridindie/comfyui-mcp:latest
+  ghcr.io/hybridindie/comfyui_mcp:latest
 
 # Or build and run locally
-docker build -t comfyui-mcp .
+docker build -t comfyui-mcp-secure .
 docker run --rm -i \
   -e COMFYUI_URL=http://host.docker.internal:8188 \
   -v ~/.comfyui-mcp:/root/.comfyui-mcp:ro \
-  comfyui-mcp
+  comfyui-mcp-secure
 ```
 
 > **Linux users:** Add `--add-host=host.docker.internal:host-gateway` if using `host.docker.internal`.
@@ -684,27 +684,27 @@ A `docker-compose.yml` is included for persistent deployments:
 COMFYUI_URL=http://your-comfyui:8188 docker compose up -d
 
 # View logs
-docker compose logs -f comfyui-mcp
+docker compose logs -f comfyui-mcp-secure
 ```
 
 The compose file mounts `./config.yaml` and persists audit logs to a named volume:
 
 ```yaml
 services:
-  comfyui-mcp:
+  comfyui-mcp-secure:
     build: .
-    image: comfyui-mcp:latest
-    container_name: comfyui-mcp
+    image: comfyui-mcp-secure:latest
+    container_name: comfyui-mcp-secure
     environment:
       - COMFYUI_URL=${COMFYUI_URL:-http://comfyui:8188}
       - COMFYUI_SECURITY_MODE=${COMFYUI_SECURITY_MODE:-audit}
     volumes:
       - ./config.yaml:/root/.comfyui-mcp/config.yaml:ro
-      - comfyui-mcp-data:/root/.comfyui-mcp/logs
+      - comfyui-mcp-secure-data:/root/.comfyui-mcp/logs
     restart: unless-stopped
 
 volumes:
-  comfyui-mcp-data:
+  comfyui-mcp-secure-data:
 ```
 
 ### Connecting to Claude Code / Claude Desktop via Docker
@@ -715,7 +715,7 @@ See the [Docker configuration](#add-to-claude-code--claude-desktop) in Quick Sta
 - Mount your config: `-v ~/.comfyui-mcp:/root/.comfyui-mcp:ro`
 - Set `COMFYUI_URL` to reach your ComfyUI instance from inside the container
 - Use `host.docker.internal` to reach ComfyUI running on your host machine
-- The GHCR image (`ghcr.io/hybridindie/comfyui-mcp:latest`) means no local build needed
+- The GHCR image (`ghcr.io/hybridindie/comfyui_mcp:latest`) means no local build needed
 
 ## License
 

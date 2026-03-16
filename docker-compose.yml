@@ -1,17 +1,17 @@
 version: "3.8"
 
 services:
-  comfyui-mcp:
+  comfyui-mcp-secure:
     build: .
-    image: comfyui-mcp:latest
-    container_name: comfyui-mcp
+    image: comfyui-mcp-secure:latest
+    container_name: comfyui-mcp-secure
     environment:
       - COMFYUI_URL=${COMFYUI_URL:-http://comfyui:8188}
       - COMFYUI_SECURITY_MODE=${COMFYUI_SECURITY_MODE:-audit}
     volumes:
       - ./config.yaml:/root/.comfyui-mcp/config.yaml:ro
-      - comfyui-mcp-data:/root/.comfyui-mcp/logs
+      - comfyui-mcp-secure-data:/root/.comfyui-mcp/logs
     restart: unless-stopped
 
 volumes:
-  comfyui-mcp-data:
+  comfyui-mcp-secure-data:
